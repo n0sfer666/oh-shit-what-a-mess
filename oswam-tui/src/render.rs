@@ -1,6 +1,8 @@
 use crate::app::{App, Panel, Phase};
 use crate::panels::{centered, focus_block, render_description, render_help, render_table};
-use crate::screens::{render_confirm, render_scanning, render_welcome};
+use crate::screens::{
+    render_confirm, render_deleting, render_done, render_scanning, render_welcome,
+};
 use crate::theme::{palette, risk_color, risk_symbol};
 use oswam_core::format::human_bytes;
 use oswam_core::select::is_deletable;
@@ -15,6 +17,8 @@ pub fn render(frame: &mut Frame, app: &App) {
         Phase::Welcome => render_welcome(frame, app, frame.area()),
         Phase::Scanning => render_scanning(frame, app, frame.area()),
         Phase::Results => render_results(frame, app),
+        Phase::Deleting => render_deleting(frame, app, frame.area()),
+        Phase::Done => render_done(frame, app, frame.area()),
     }
 }
 

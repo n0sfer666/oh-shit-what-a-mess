@@ -3,6 +3,7 @@ pub mod detect;
 pub mod event;
 pub mod input;
 pub mod panels;
+pub mod query;
 pub mod render;
 pub mod run;
 pub mod screens;

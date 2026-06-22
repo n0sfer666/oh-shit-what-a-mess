@@ -33,6 +33,28 @@ pub fn print_scan(result: &ScanResult) {
     println!("\nИтого: {}", human_bytes(result.total_bytes));
 }
 
+pub fn print_tips() {
+    let snaps = std::process::Command::new("tmutil")
+        .args(["listlocalsnapshots", "/"])
+        .output()
+        .ok()
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .filter(|l| l.contains("com.apple.TimeMachine"))
+                .count()
+        })
+        .unwrap_or(0);
+    println!("\n💡 System Data также может включать (вне v1, нужен sudo):");
+    if snaps > 0 {
+        println!("  • Локальные снимки Time Machine: {snaps} шт. Освобождение:");
+        println!("      sudo tmutil thinlocalsnapshots / 21474836480 4   # до ~20 ГБ");
+    } else {
+        println!("  • Снимки Time Machine: tmutil listlocalsnapshots /");
+    }
+    println!("  • Системные кэши /Library/Caches");
+}
+
 pub fn print_summary(manifest: &Manifest, dry_run: bool, trash: bool) {
     let head = if dry_run {
         "Превью"

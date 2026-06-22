@@ -1,7 +1,7 @@
 use oswam_core::config::Theme;
 use oswam_core::delete::Disposition;
 use oswam_core::risk::RiskLevel;
-use oswam_core::scan::{ScanEntry, ScanResult};
+use oswam_core::scan::ScanResult;
 use oswam_core::select::is_deletable;
 use std::collections::HashSet;
 
@@ -10,6 +10,15 @@ pub enum Phase {
     Welcome,
     Scanning,
     Results,
+    Deleting,
+    Done,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Summary {
+    pub count: usize,
+    pub freed: u64,
+    pub trashed: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,6 +65,8 @@ pub struct ScanState {
 pub struct App {
     pub phase: Phase,
     pub scan: ScanState,
+    pub delete: ScanState,
+    pub summary: Option<Summary>,
     pub result: ScanResult,
     pub theme: Theme,
     pub panel: Panel,
@@ -69,7 +80,7 @@ pub struct App {
     pub start_scan_requested: bool,
     pub confirm_open: bool,
     pub confirm_choice: usize,
-    pub decision: Option<Disposition>,
+    pub pending_delete: Option<Disposition>,
     pub(crate) first_run: bool,
 }
 
@@ -78,6 +89,8 @@ impl App {
         Self {
             phase: Phase::Welcome,
             scan: ScanState::default(),
+            delete: ScanState::default(),
+            summary: None,
             result: ScanResult {
                 categories: Vec::new(),
                 total_bytes: 0,
@@ -94,9 +107,28 @@ impl App {
             start_scan_requested: false,
             confirm_open: false,
             confirm_choice: 0,
-            decision: None,
+            pending_delete: None,
             first_run,
         }
+    }
+
+    pub fn update_delete(&mut self, message: String, done: usize, total: usize, freed: u64) {
+        self.phase = Phase::Deleting;
+        self.delete = ScanState {
+            message,
+            done,
+            total,
+            bytes: freed,
+        };
+    }
+
+    pub fn set_summary(&mut self, count: usize, freed: u64, trashed: bool) {
+        self.phase = Phase::Done;
+        self.summary = Some(Summary {
+            count,
+            freed,
+            trashed,
+        });
     }
 
     pub fn set_result(&mut self, result: ScanResult) {
@@ -121,52 +153,6 @@ impl App {
             total,
             bytes,
         };
-    }
-
-    pub fn ordered_categories(&self) -> Vec<usize> {
-        let mut idx: Vec<usize> = (0..self.result.categories.len()).collect();
-        match self.grouping {
-            Grouping::Category => {}
-            Grouping::Size => {
-                idx.sort_by_key(|i| std::cmp::Reverse(self.result.categories[*i].total_bytes))
-            }
-            Grouping::Risk => idx.sort_by_key(|i| std::cmp::Reverse(max_risk(&self.result, *i))),
-        }
-        idx
-    }
-
-    pub fn current_category(&self) -> Option<usize> {
-        self.ordered_categories().get(self.category_cursor).copied()
-    }
-
-    pub fn entry_count(&self) -> usize {
-        self.current_category()
-            .map(|ci| self.result.categories[ci].entries.len())
-            .unwrap_or(0)
-    }
-
-    pub fn selected_total_bytes(&self) -> u64 {
-        self.selected
-            .iter()
-            .filter_map(|(ci, ei)| self.result.categories.get(*ci)?.entries.get(*ei))
-            .map(|e| e.physical_bytes)
-            .sum()
-    }
-
-    pub fn is_selected(&self, ci: usize, ei: usize) -> bool {
-        self.selected.contains(&(ci, ei))
-    }
-
-    pub fn selected_entries(&self) -> Vec<ScanEntry> {
-        let mut out = Vec::new();
-        for (ci, cat) in self.result.categories.iter().enumerate() {
-            for (ei, entry) in cat.entries.iter().enumerate() {
-                if self.is_selected(ci, ei) {
-                    out.push(entry.clone());
-                }
-            }
-        }
-        out
     }
 }
 

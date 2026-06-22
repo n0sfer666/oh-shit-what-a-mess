@@ -38,10 +38,39 @@ pub fn render_welcome(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 pub fn render_scanning(frame: &mut Frame, app: &App, area: Rect) {
+    progress_box(
+        frame,
+        app,
+        area,
+        " Сканирование… (q — прервать) ",
+        &app.scan,
+        "Найдено",
+    );
+}
+
+pub fn render_deleting(frame: &mut Frame, app: &App, area: Rect) {
+    progress_box(
+        frame,
+        app,
+        area,
+        " Удаление… (не закрывайте) ",
+        &app.delete,
+        "Освобождено",
+    );
+}
+
+fn progress_box(
+    frame: &mut Frame,
+    app: &App,
+    area: Rect,
+    title: &str,
+    state: &crate::app::ScanState,
+    bytes_label: &str,
+) {
     let pal = palette(app.theme);
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" Сканирование… (q — прервать) ")
+        .title(title.to_string())
         .border_style(Style::default().fg(pal.accent));
     let popup = centered(area, 64, 8);
     let inner = block.inner(popup);
@@ -53,22 +82,59 @@ pub fn render_scanning(frame: &mut Frame, app: &App, area: Rect) {
         Constraint::Length(1),
     ])
     .split(inner);
-    frame.render_widget(Paragraph::new(app.scan.message.clone()), rows[0]);
-    let ratio = if app.scan.total == 0 {
+    frame.render_widget(Paragraph::new(state.message.clone()), rows[0]);
+    let ratio = if state.total == 0 {
         0.0
     } else {
-        app.scan.done as f64 / app.scan.total as f64
+        state.done as f64 / state.total as f64
     };
     frame.render_widget(
         Gauge::default()
             .gauge_style(Style::default().fg(pal.accent))
             .ratio(ratio.clamp(0.0, 1.0))
-            .label(format!("{}/{}", app.scan.done, app.scan.total)),
+            .label(format!("{}/{}", state.done, state.total)),
         rows[1],
     );
     frame.render_widget(
-        Paragraph::new(format!("Найдено: {}", human_bytes(app.scan.bytes))),
+        Paragraph::new(format!("{bytes_label}: {}", human_bytes(state.bytes))),
         rows[2],
+    );
+}
+
+pub fn render_done(frame: &mut Frame, app: &App, area: Rect) {
+    let pal = palette(app.theme);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Готово ")
+        .border_style(Style::default().fg(pal.accent));
+    let s = app.summary;
+    let (count, freed, trashed) = s
+        .map(|s| (s.count, s.freed, s.trashed))
+        .unwrap_or((0, 0, false));
+    let note = if trashed {
+        "Перемещено в Корзину — место освободится после её очистки."
+    } else {
+        "Удалено безвозвратно."
+    };
+    let text = vec![
+        Line::raw(""),
+        Line::styled(
+            format!("Обработано {count} элементов"),
+            Style::default().fg(pal.accent),
+        ),
+        Line::raw(format!("Освобождено ~{}", human_bytes(freed))),
+        Line::raw(""),
+        Line::raw(note),
+        Line::raw(""),
+        Line::raw("q — выход"),
+    ];
+    let popup = centered(area, 60, 11);
+    frame.render_widget(Clear, popup);
+    frame.render_widget(
+        Paragraph::new(text)
+            .block(block)
+            .alignment(Alignment::Center),
+        popup,
     );
 }
 
