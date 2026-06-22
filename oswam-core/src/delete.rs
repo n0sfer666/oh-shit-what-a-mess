@@ -37,9 +37,9 @@ pub fn delete_target<F: FsOps>(
     let items = top_level_items(fs, path, kind)?;
     let mut done = Vec::with_capacity(items.len());
     for item in items {
-        let physical_bytes = physical_size(fs, &item)?;
-        if !dry_run {
-            apply(fs, &item, disposition)?;
+        let physical_bytes = physical_size(fs, &item).unwrap_or(0);
+        if !dry_run && apply(fs, &item, disposition).is_err() {
+            continue;
         }
         done.push(DeletedItem {
             path: item,
@@ -51,7 +51,7 @@ pub fn delete_target<F: FsOps>(
 
 fn top_level_items<F: FsOps>(fs: &F, path: &Path, kind: CleanupKind) -> io::Result<Vec<PathBuf>> {
     match kind {
-        CleanupKind::DeleteContents => fs.read_dir(path),
+        CleanupKind::DeleteContents => Ok(fs.read_dir(path).unwrap_or_default()),
         CleanupKind::DeletePath => Ok(vec![path.to_path_buf()]),
         CleanupKind::NativeCommand | CleanupKind::InfoOnly => Ok(Vec::new()),
     }
