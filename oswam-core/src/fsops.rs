@@ -127,6 +127,7 @@ pub(crate) mod fake {
                 PathBuf::from(path),
                 Meta {
                     blocks,
+                    uid: 501,
                     ..Meta::default()
                 },
             );
@@ -140,6 +141,7 @@ pub(crate) mod fake {
                 Meta {
                     is_dir: true,
                     blocks: 8,
+                    uid: 501,
                     ..Meta::default()
                 },
             );
