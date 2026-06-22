@@ -47,54 +47,36 @@ where
     P: ProcessProbe,
     N: Fn(&NativeSpec) -> Option<u64>,
 {
+    scan_with_progress(ctx, categories, native_size, |_, _, _, _| {})
+}
+
+pub fn scan_with_progress<F, P, N, G>(
+    ctx: &ScanCtx<'_, F, P>,
+    categories: &[Category],
+    native_size: N,
+    mut on_target: G,
+) -> ScanResult
+where
+    F: FsOps,
+    P: ProcessProbe,
+    N: Fn(&NativeSpec) -> Option<u64>,
+    G: FnMut(&str, usize, usize, u64),
+{
+    let total_targets: usize = categories.iter().map(|c| c.targets.len()).sum();
     let mut out = Vec::new();
     let mut grand_total = 0u64;
+    let mut processed = 0usize;
     for cat in categories {
         let mut entries = Vec::new();
         for target in &cat.targets {
-            if let Some(spec) = &target.native {
-                if let Some(bytes) = native_size(spec) {
-                    entries.push(ScanEntry {
-                        display: target.path.clone(),
-                        path: PathBuf::from(&target.path),
-                        kind: target.kind,
-                        risk: target.risk,
-                        physical_bytes: bytes,
-                        native: Some(spec.clone()),
-                    });
-                }
-                continue;
+            if let Some(entry) = process_target(ctx, target, &native_size) {
+                grand_total += entry.physical_bytes;
+                entries.push(entry);
             }
-            let expanded = expand_tilde(&target.path, ctx.home);
-            if ctx.config.is_ignored(&expanded) {
-                continue;
-            }
-            let Ok(meta) = ctx.fs.meta(&expanded) else {
-                continue;
-            };
-            let facts = facts_from_meta(
-                &expanded,
-                &meta,
-                ctx.config.is_protected(&expanded, ctx.home),
-                ctx.probe.holds(&expanded),
-            );
-            let risk = if target.kind == CleanupKind::InfoOnly {
-                target.risk.max(RiskLevel::Caution)
-            } else {
-                classify(&facts, target.risk)
-            };
-            let physical_bytes = physical_size(ctx.fs, &expanded).unwrap_or(0);
-            entries.push(ScanEntry {
-                display: target.path.clone(),
-                path: expanded,
-                kind: target.kind,
-                risk,
-                physical_bytes,
-                native: None,
-            });
+            processed += 1;
+            on_target(&target.path, processed, total_targets, grand_total);
         }
         let total: u64 = entries.iter().map(|e| e.physical_bytes).sum();
-        grand_total += total;
         out.push(ScanCategory {
             id: cat.id.to_string(),
             name: cat.name.to_string(),
@@ -107,6 +89,54 @@ where
         categories: out,
         total_bytes: grand_total,
     }
+}
+
+fn process_target<F, P, N>(
+    ctx: &ScanCtx<'_, F, P>,
+    target: &crate::category::Target,
+    native_size: &N,
+) -> Option<ScanEntry>
+where
+    F: FsOps,
+    P: ProcessProbe,
+    N: Fn(&NativeSpec) -> Option<u64>,
+{
+    if let Some(spec) = &target.native {
+        let bytes = native_size(spec)?;
+        return Some(ScanEntry {
+            display: target.path.clone(),
+            path: PathBuf::from(&target.path),
+            kind: target.kind,
+            risk: target.risk,
+            physical_bytes: bytes,
+            native: Some(spec.clone()),
+        });
+    }
+    let expanded = expand_tilde(&target.path, ctx.home);
+    if ctx.config.is_ignored(&expanded) {
+        return None;
+    }
+    let meta = ctx.fs.meta(&expanded).ok()?;
+    let facts = facts_from_meta(
+        &expanded,
+        &meta,
+        ctx.config.is_protected(&expanded, ctx.home),
+        ctx.probe.holds(&expanded),
+    );
+    let risk = if target.kind == CleanupKind::InfoOnly {
+        target.risk.max(RiskLevel::Caution)
+    } else {
+        classify(&facts, target.risk)
+    };
+    let physical_bytes = physical_size(ctx.fs, &expanded).unwrap_or(0);
+    Some(ScanEntry {
+        display: target.path.clone(),
+        path: expanded,
+        kind: target.kind,
+        risk,
+        physical_bytes,
+        native: None,
+    })
 }
 
 #[cfg(test)]
@@ -197,6 +227,33 @@ mod tests {
         }];
         let res = scan(&ctx, &cats, |_| None);
         assert_eq!(res.categories[0].entries[0].risk, RiskLevel::Caution);
+    }
+
+    #[test]
+    fn progress_reaches_total_targets() {
+        let (fs, probe, config) = ctx_parts();
+        let home = Path::new("/Users/n0sfer");
+        let ctx = ScanCtx {
+            fs: &fs,
+            probe: &probe,
+            config: &config,
+            home,
+        };
+        let cats = builtin_categories();
+        let total_targets: usize = cats.iter().map(|c| c.targets.len()).sum();
+        let mut last_done = 0;
+        let mut last_total = 0;
+        scan_with_progress(
+            &ctx,
+            &cats,
+            |_| None,
+            |_label, done, total, _bytes| {
+                last_done = done;
+                last_total = total;
+            },
+        );
+        assert_eq!(last_total, total_targets);
+        assert_eq!(last_done, total_targets);
     }
 
     #[test]

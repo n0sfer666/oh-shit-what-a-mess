@@ -13,6 +13,8 @@ pub fn map_key(ev: KeyEvent) -> Option<Key> {
         (KeyCode::Char('t'), false) => Some(Key::Theme),
         (KeyCode::Char('o'), false) => Some(Key::Group),
         (KeyCode::Char(' '), false) => Some(Key::Space),
+        (KeyCode::Enter, _) => Some(Key::Enter),
+        (KeyCode::Esc, _) => Some(Key::Cancel),
         (KeyCode::Tab, _) => Some(Key::Tab),
         (KeyCode::Char('j'), false) | (KeyCode::Down, _) => Some(Key::Down),
         (KeyCode::Char('k'), false) | (KeyCode::Up, _) => Some(Key::Up),

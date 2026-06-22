@@ -1,11 +1,38 @@
-use crate::app::{App, Grouping, Key, Panel};
+use crate::app::{App, Grouping, Key, Panel, Phase};
 use oswam_core::config::Theme;
+use oswam_core::delete::Disposition;
 use oswam_core::select::is_deletable;
 
 impl App {
     pub fn on_key(&mut self, key: Key) {
+        match self.phase {
+            Phase::Welcome => self.on_welcome_key(key),
+            Phase::Scanning => self.on_scanning_key(key),
+            Phase::Results => self.on_results_key(key),
+        }
+    }
+
+    fn on_welcome_key(&mut self, key: Key) {
+        match key {
+            Key::Enter | Key::Space | Key::Proceed => self.start_scan_requested = true,
+            Key::Quit | Key::Cancel => self.should_quit = true,
+            _ => {}
+        }
+    }
+
+    fn on_scanning_key(&mut self, key: Key) {
+        if matches!(key, Key::Quit | Key::Cancel) {
+            self.should_quit = true;
+        }
+    }
+
+    fn on_results_key(&mut self, key: Key) {
         if self.help_visible {
             self.handle_help_key(key);
+            return;
+        }
+        if self.confirm_open {
+            self.handle_confirm_key(key);
             return;
         }
         match key {
@@ -13,7 +40,7 @@ impl App {
             Key::Help => self.help_visible = true,
             Key::Theme => self.toggle_theme(),
             Key::Group => self.cycle_grouping(),
-            Key::Proceed => self.proceed_requested = true,
+            Key::Proceed => self.open_confirm(),
             Key::Tab => self.cycle_panel(),
             Key::Left => self.panel = Panel::Sidebar,
             Key::Right => self.panel = Panel::Table,
@@ -22,6 +49,29 @@ impl App {
             Key::Top => self.set_cursor(0),
             Key::Bottom => self.set_cursor(usize::MAX),
             Key::Space => self.toggle_selection(),
+            Key::Enter | Key::Cancel => {}
+        }
+    }
+
+    fn open_confirm(&mut self) {
+        if self.selected_total_bytes() > 0 {
+            self.confirm_open = true;
+            self.confirm_choice = 0;
+        }
+    }
+
+    fn handle_confirm_key(&mut self, key: Key) {
+        match key {
+            Key::Up | Key::Down => self.confirm_choice ^= 1,
+            Key::Enter => {
+                self.decision = Some(if self.confirm_choice == 0 {
+                    Disposition::Trash
+                } else {
+                    Disposition::Permanent
+                });
+            }
+            Key::Cancel | Key::Quit => self.confirm_open = false,
+            _ => {}
         }
     }
 
