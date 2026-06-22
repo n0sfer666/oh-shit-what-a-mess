@@ -1,6 +1,6 @@
 ---
-source: oswam-tui/src/render.rs
-expression: draw(&app)
+source: oswam-tui/tests/snapshots.rs
+expression: draw(&results_app(true))
 ---
 "┌ Категории ─────────────────────────┐┌ Описание ──────────────────────────────┐"
 "│[x] C ✓ Системный мусор  1.5 MB     ││✓ Safe                                  │"

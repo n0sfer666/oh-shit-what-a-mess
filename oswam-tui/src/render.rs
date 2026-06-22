@@ -1,5 +1,6 @@
-use crate::app::{App, Panel};
-use crate::panels::{focus_block, render_description, render_help, render_table};
+use crate::app::{App, Panel, Phase};
+use crate::panels::{centered, focus_block, render_description, render_help, render_table};
+use crate::screens::{render_confirm, render_scanning, render_welcome};
 use crate::theme::{palette, risk_color, risk_symbol};
 use oswam_core::format::human_bytes;
 use oswam_core::select::is_deletable;
@@ -10,6 +11,14 @@ use ratatui::widgets::{List, ListItem, Paragraph};
 use ratatui::Frame;
 
 pub fn render(frame: &mut Frame, app: &App) {
+    match app.phase {
+        Phase::Welcome => render_welcome(frame, app, frame.area()),
+        Phase::Scanning => render_scanning(frame, app, frame.area()),
+        Phase::Results => render_results(frame, app),
+    }
+}
+
+fn render_results(frame: &mut Frame, app: &App) {
     let area = frame.area();
     let rows = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
     let cols = Layout::horizontal([Constraint::Length(38), Constraint::Min(0)]).split(rows[0]);
@@ -20,6 +29,9 @@ pub fn render(frame: &mut Frame, app: &App) {
     render_table(frame, app, right[1]);
     render_action_bar(frame, app, rows[1]);
 
+    if app.confirm_open {
+        render_confirm(frame, app, centered(area, 56, 9));
+    }
     if app.help_visible {
         render_help(frame, app, area);
     }
@@ -90,72 +102,4 @@ fn render_action_bar(frame: &mut Frame, app: &App, area: Rect) {
         Paragraph::new(text).style(Style::default().fg(pal.fg).bg(pal.bg)),
         area,
     );
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::app::App;
-    use oswam_core::category::CleanupKind;
-    use oswam_core::config::Theme;
-    use oswam_core::risk::RiskLevel;
-    use oswam_core::scan::{ScanCategory, ScanEntry, ScanResult};
-    use ratatui::backend::TestBackend;
-    use ratatui::Terminal;
-    use std::path::PathBuf;
-
-    fn sample() -> ScanResult {
-        ScanResult {
-            categories: vec![
-                ScanCategory {
-                    id: "system".into(),
-                    name: "Системный мусор".into(),
-                    glyph: "C".into(),
-                    entries: vec![ScanEntry {
-                        display: "~/Library/Logs".into(),
-                        path: PathBuf::from("/Users/x/Library/Logs"),
-                        kind: CleanupKind::DeleteContents,
-                        risk: RiskLevel::Safe,
-                        physical_bytes: 1_500_000,
-                        native: None,
-                    }],
-                    total_bytes: 1_500_000,
-                },
-                ScanCategory {
-                    id: "big-data".into(),
-                    name: "Большие данные".into(),
-                    glyph: "B".into(),
-                    entries: vec![ScanEntry {
-                        display: "iOS backup".into(),
-                        path: PathBuf::from("/Users/x/backup"),
-                        kind: CleanupKind::InfoOnly,
-                        risk: RiskLevel::Caution,
-                        physical_bytes: 8_500_000_000,
-                        native: None,
-                    }],
-                    total_bytes: 8_500_000_000,
-                },
-            ],
-            total_bytes: 8_501_500_000,
-        }
-    }
-
-    fn draw(app: &App) -> String {
-        let backend = TestBackend::new(80, 20);
-        let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|f| render(f, app)).unwrap();
-        format!("{}", terminal.backend())
-    }
-
-    #[test]
-    fn snapshot_main_layout_dark() {
-        let app = App::new(sample(), Theme::Dark, false);
-        insta::assert_snapshot!("main_layout_dark", draw(&app));
-    }
-
-    #[test]
-    fn snapshot_help_overlay() {
-        let app = App::new(sample(), Theme::Dark, true);
-        insta::assert_snapshot!("help_overlay", draw(&app));
-    }
 }

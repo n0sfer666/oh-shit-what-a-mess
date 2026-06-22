@@ -133,7 +133,7 @@ fn current_entry(app: &App) -> Option<&ScanEntry> {
     app.result.categories[ci].entries.get(app.file_cursor)
 }
 
-fn centered(area: Rect, width: u16, height: u16) -> Rect {
+pub fn centered(area: Rect, width: u16, height: u16) -> Rect {
     let w = width.min(area.width);
     let h = height.min(area.height);
     Rect {
