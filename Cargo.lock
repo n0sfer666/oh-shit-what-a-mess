@@ -621,6 +621,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "dirs",
  "oswam-core",
  "oswam-tui",
  "serde_json",
