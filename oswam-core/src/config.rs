@@ -25,6 +25,10 @@ pub enum ConfigError {
     Parse(#[from] toml::de::Error),
 }
 
+pub fn default_config_path() -> Option<std::path::PathBuf> {
+    dirs::home_dir().map(|h| h.join(".config/oswam/config.toml"))
+}
+
 impl Config {
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         if !path.exists() {
