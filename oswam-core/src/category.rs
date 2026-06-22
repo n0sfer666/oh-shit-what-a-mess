@@ -1,6 +1,8 @@
 use crate::risk::RiskLevel;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum CleanupKind {
     DeleteContents,
     DeletePath,
@@ -8,7 +10,7 @@ pub enum CleanupKind {
     InfoOnly,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NativeSpec {
     pub estimate: Vec<String>,
     pub clean: Vec<String>,
