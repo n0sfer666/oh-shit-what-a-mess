@@ -6,6 +6,7 @@ use oswam_core::fsops::RealFs;
 use oswam_core::native;
 use oswam_core::privilege::is_root;
 use oswam_core::process::LsofProbe;
+use oswam_core::risk::RiskLevel;
 use oswam_core::scan::{scan_with_progress, ScanCtx, ScanEntry, ScanResult};
 use oswam_core::select::{selectable, Selection};
 use oswam_tui::app::App;
@@ -13,7 +14,7 @@ use oswam_tui::detect::detect_from_env;
 use oswam_tui::run::{run, DeleteMsg, DeleteRunner, ScanJob, ScanMsg};
 
 use crate::cli::disposition;
-use crate::context::{run_scan, snapshot_category, Env};
+use crate::context::{run_scan, snapshot_category, system_caches_category, Env};
 use crate::output::{print_scan, print_summary};
 use crate::perform::execute;
 
@@ -101,7 +102,12 @@ fn build_delete_runner() -> DeleteRunner {
                 count += 1;
                 continue;
             }
-            if let Ok(items) = delete_target(&fs, &entry.path, entry.kind, disposition, false) {
+            let disp = if entry.risk == RiskLevel::Danger {
+                Disposition::Permanent
+            } else {
+                disposition
+            };
+            if let Ok(items) = delete_target(&fs, &entry.path, entry.kind, disp, false) {
                 for item in items {
                     freed += item.physical_bytes;
                     count += 1;
@@ -156,12 +162,16 @@ fn build_scan_job(env: &Env) -> ScanJob {
         );
         if is_root() {
             let _ = tx.send(ScanMsg::Progress {
-                message: "Снимки Time Machine…".into(),
+                message: "Снимки Time Machine и системные кэши…".into(),
                 done: 0,
                 total: 0,
                 bytes: result.total_bytes,
             });
-            if let Some(cat) = snapshot_category() {
+            for cat in [snapshot_category(), system_caches_category()]
+                .into_iter()
+                .flatten()
+            {
+                result.total_bytes += cat.total_bytes;
                 result.categories.push(cat);
             }
         }

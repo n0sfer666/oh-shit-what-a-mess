@@ -35,13 +35,16 @@ pub fn print_scan(result: &ScanResult) {
 
 pub fn print_tips(elevated: bool) {
     if elevated {
-        println!("\n💡 Режим sudo: снимки Time Machine включены в скан (последний сохраняется).");
+        println!("\n💡 Режим sudo: + снимки Time Machine (последний сохраняется)");
+        println!("   + системные кэши /Library/Caches (риск: временные сбои, желателен рестарт).");
         println!("   Снимки — не замена внешнему бэкапу; система создаёт их не просто так.");
     } else {
         println!("\n💡 Для более глубокой очистки перезапусти с sudo:");
-        println!("      sudo oswam        # + локальные снимки Time Machine");
-        println!("   Риск: снимки — локальный recovery point (не замена бэкапу).");
-        println!("   Последний снимок не удаляется по умолчанию.");
+        println!("      sudo oswam        # + снимки Time Machine + системные кэши");
+        println!("   Риск: снимки — локальный recovery point (не замена бэкапу);");
+        println!(
+            "   системные кэши — временные сбои до пересоздания. Последний снимок не трогаем."
+        );
     }
 }
 
