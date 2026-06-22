@@ -52,20 +52,20 @@ fn draw(app: &App) -> String {
 }
 
 fn results_app(first_run: bool) -> App {
-    let mut app = App::new(Theme::Dark, first_run);
+    let mut app = App::new(Theme::Dark, first_run, false);
     app.set_result(sample());
     app
 }
 
 #[test]
 fn snapshot_welcome() {
-    let app = App::new(Theme::Dark, false);
+    let app = App::new(Theme::Dark, false, false);
     insta::assert_snapshot!("welcome", draw(&app));
 }
 
 #[test]
 fn snapshot_scanning() {
-    let mut app = App::new(Theme::Dark, false);
+    let mut app = App::new(Theme::Dark, false, false);
     app.update_scan(
         "Сканирую ~/Library/Caches/Yarn".into(),
         6,

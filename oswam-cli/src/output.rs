@@ -33,26 +33,16 @@ pub fn print_scan(result: &ScanResult) {
     println!("\nИтого: {}", human_bytes(result.total_bytes));
 }
 
-pub fn print_tips() {
-    let snaps = std::process::Command::new("tmutil")
-        .args(["listlocalsnapshots", "/"])
-        .output()
-        .ok()
-        .map(|o| {
-            String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .filter(|l| l.contains("com.apple.TimeMachine"))
-                .count()
-        })
-        .unwrap_or(0);
-    println!("\n💡 System Data также может включать (вне v1, нужен sudo):");
-    if snaps > 0 {
-        println!("  • Локальные снимки Time Machine: {snaps} шт. Освобождение:");
-        println!("      sudo tmutil thinlocalsnapshots / 21474836480 4   # до ~20 ГБ");
+pub fn print_tips(elevated: bool) {
+    if elevated {
+        println!("\n💡 Режим sudo: снимки Time Machine включены в скан (последний сохраняется).");
+        println!("   Снимки — не замена внешнему бэкапу; система создаёт их не просто так.");
     } else {
-        println!("  • Снимки Time Machine: tmutil listlocalsnapshots /");
+        println!("\n💡 Для более глубокой очистки перезапусти с sudo:");
+        println!("      sudo oswam        # + локальные снимки Time Machine");
+        println!("   Риск: снимки — локальный recovery point (не замена бэкапу).");
+        println!("   Последний снимок не удаляется по умолчанию.");
     }
-    println!("  • Системные кэши /Library/Caches");
 }
 
 pub fn print_summary(manifest: &Manifest, dry_run: bool, trash: bool) {

@@ -58,9 +58,19 @@ oswam clean --safe --delete --yes       # безвозвратно
 - **Dev-окружение**: `~/.npm`, `~/.cache`, Xcode DerivedData/iOS DeviceSupport/Archives,
   CoreSimulator, Docker (`docker system prune`), недоступные симуляторы (`xcrun simctl delete unavailable`).
 - **Большие данные (инфо)**: iOS-бэкапы (MobileSync) — только показ.
+- **Снимки Time Machine** (только под sudo): локальные APFS-снимки. Удаляются все, **кроме
+  последнего** (он сохраняется как свежий локальный recovery point).
 
-Часть «System Data» требует sudo и в v1 не трогается — `oswam scan` подсказывает, что ещё можно
-освободить вручную (локальные снимки Time Machine `sudo tmutil thinlocalsnapshots /`, `/Library/Caches`).
+## Режим sudo
+
+Без sudo чистится пользовательское пространство. Запуск `sudo oswam` добавляет локальные снимки
+Time Machine. Если запущено без прав, программа сообщит об этом на стартовом экране и подскажет
+`sudo oswam`.
+
+> Снимки Time Machine — это локальные почасовые копии (хранятся ~24ч, создаются системой
+> не просто так). Они **не заменяют** внешний бэкап. Удаление старых снимков безопасно; **последний
+> снимок не удаляется по умолчанию**. Источники: [Apple Support](https://support.apple.com/en-us/102154),
+> [AppleInsider](https://appleinsider.com/articles/21/06/26/how-to-delete-time-machine-local-snapshots-in-macos).
 
 ## Архитектура
 

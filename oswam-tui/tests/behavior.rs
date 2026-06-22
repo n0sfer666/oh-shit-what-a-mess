@@ -43,27 +43,27 @@ fn result() -> ScanResult {
 }
 
 fn results_app(first_run: bool) -> App {
-    let mut a = App::new(Theme::Dark, first_run);
+    let mut a = App::new(Theme::Dark, first_run, false);
     a.set_result(result());
     a
 }
 
 #[test]
 fn starts_in_welcome_phase() {
-    let a = App::new(Theme::Dark, false);
+    let a = App::new(Theme::Dark, false, false);
     assert_eq!(a.phase, Phase::Welcome);
 }
 
 #[test]
 fn welcome_enter_requests_scan() {
-    let mut a = App::new(Theme::Dark, false);
+    let mut a = App::new(Theme::Dark, false, false);
     a.on_key(Key::Enter);
     assert!(a.start_scan_requested);
 }
 
 #[test]
 fn update_scan_enters_scanning_phase() {
-    let mut a = App::new(Theme::Dark, false);
+    let mut a = App::new(Theme::Dark, false, false);
     a.update_scan("x".into(), 1, 4, 10);
     assert_eq!(a.phase, Phase::Scanning);
     assert_eq!(a.scan.done, 1);
