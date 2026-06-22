@@ -1,7 +1,8 @@
 use crate::app::App;
 use crate::panels::centered;
-use crate::theme::palette;
+use crate::theme::{palette, risk_color};
 use oswam_core::format::human_bytes;
+use oswam_core::risk::RiskLevel;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
@@ -27,9 +28,13 @@ pub fn render_welcome(frame: &mut Frame, app: &App, area: Rect) {
             "Режим sudo: + снимки Time Machine (последний сохраняется)",
             Style::default().fg(pal.accent),
         ));
+        text.push(Line::styled(
+            "+ системные кэши /Library/Caches (риск: временные сбои, рестарт)",
+            Style::default().fg(risk_color(RiskLevel::Danger)),
+        ));
     } else {
         text.push(Line::styled(
-            "Без sudo. Для снимков Time Machine: перезапусти `sudo oswam`.",
+            "Без sudo. Для снимков TM и системных кэшей: `sudo oswam`.",
             Style::default().fg(pal.muted),
         ));
         text.push(Line::styled(

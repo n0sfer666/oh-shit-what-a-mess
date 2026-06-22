@@ -2,13 +2,14 @@ use anyhow::{Context, Result};
 use oswam_core::category::{builtin_categories, CleanupKind, NativeSpec};
 use oswam_core::config::{default_config_path, Config};
 use oswam_core::docker;
-use oswam_core::fsops::RealFs;
+use oswam_core::fsops::{is_dataless, is_sip_protected, FsOps, RealFs};
 use oswam_core::privilege::is_root;
 use oswam_core::process::LsofProbe;
 use oswam_core::risk::RiskLevel;
 use oswam_core::scan::{scan, ScanCategory, ScanCtx, ScanEntry, ScanResult};
+use oswam_core::size::physical_size;
 use oswam_core::snapshots;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct Env {
     pub config: Config,
@@ -42,11 +43,55 @@ pub fn run_scan(env: &Env) -> Result<ScanResult> {
     };
     let mut result = scan(&ctx, &builtin_categories(), docker::estimate);
     if is_root() {
-        if let Some(cat) = snapshot_category() {
+        for cat in [snapshot_category(), system_caches_category()]
+            .into_iter()
+            .flatten()
+        {
+            result.total_bytes += cat.total_bytes;
             result.categories.push(cat);
         }
     }
     Ok(result)
+}
+
+pub fn system_caches_category() -> Option<ScanCategory> {
+    let fs = RealFs::new().ok()?;
+    let root = Path::new("/Library/Caches");
+    let children = fs.read_dir(root).ok()?;
+    let mut entries = Vec::new();
+    let mut total = 0u64;
+    for child in children {
+        let Ok(meta) = fs.meta(&child) else {
+            continue;
+        };
+        if is_sip_protected(meta.flags) || is_dataless(meta.flags) {
+            continue;
+        }
+        let display = child
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| child.to_string_lossy().into_owned());
+        let physical_bytes = physical_size(&fs, &child).unwrap_or(0);
+        total += physical_bytes;
+        entries.push(ScanEntry {
+            display,
+            path: child,
+            kind: CleanupKind::DeleteContents,
+            risk: RiskLevel::Danger,
+            physical_bytes,
+            native: None,
+        });
+    }
+    if entries.is_empty() {
+        return None;
+    }
+    Some(ScanCategory {
+        id: "system-caches".to_string(),
+        name: "Системные кэши /Library/Caches (sudo, риск)".to_string(),
+        glyph: "⚙".to_string(),
+        entries,
+        total_bytes: total,
+    })
 }
 
 pub fn snapshot_category() -> Option<ScanCategory> {
