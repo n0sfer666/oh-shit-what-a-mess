@@ -9,3 +9,17 @@ license = "MIT"
 authors = ["n0sfer"]
 repository = "https://github.com/n0sfer/oswam"
 rust-version = "1.80"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+thiserror = "2"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+ratatui = "0.29"
+crossterm = "0.28"
+glob = "0.3"
+dirs = "5"
+chrono = { version = "0.4", features = ["clock"] }
+insta = "1"

@@ -9,3 +9,8 @@ rust-version.workspace = true
 
 [dependencies]
 oswam-core = { path = "../oswam-core" }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
