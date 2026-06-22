@@ -1,0 +1,5 @@
+{
+  "test": "cargo test",
+  "types": "cargo clippy --all-targets -- -D warnings",
+  "lint": "cargo fmt --check"
+}

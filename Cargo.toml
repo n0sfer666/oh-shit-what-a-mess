@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = ["oswam-core", "oswam-tui", "oswam-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["n0sfer"]
+repository = "https://github.com/n0sfer/oswam"
+rust-version = "1.80"
