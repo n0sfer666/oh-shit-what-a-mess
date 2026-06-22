@@ -1,7 +1,9 @@
 pub mod category;
 pub mod config;
+pub mod delete;
 pub mod facts;
 pub mod fsops;
+pub mod manifest;
 pub mod paths;
 pub mod process;
 pub mod risk;
