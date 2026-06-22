@@ -3,6 +3,8 @@ use oswam_core::category::{builtin_categories, CleanupKind};
 use oswam_core::delete::{delete_target, Disposition};
 use oswam_core::docker;
 use oswam_core::fsops::RealFs;
+use oswam_core::native;
+use oswam_core::privilege::is_root;
 use oswam_core::process::LsofProbe;
 use oswam_core::scan::{scan_with_progress, ScanCtx, ScanEntry, ScanResult};
 use oswam_core::select::{selectable, Selection};
@@ -11,7 +13,7 @@ use oswam_tui::detect::detect_from_env;
 use oswam_tui::run::{run, DeleteMsg, DeleteRunner, ScanJob, ScanMsg};
 
 use crate::cli::disposition;
-use crate::context::{run_scan, Env};
+use crate::context::{run_scan, snapshot_category, Env};
 use crate::output::{print_scan, print_summary};
 use crate::perform::execute;
 
@@ -21,7 +23,7 @@ pub fn cmd_scan(env: &Env, json: bool) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&result)?);
     } else {
         print_scan(&result);
-        crate::output::print_tips();
+        crate::output::print_tips(is_root());
     }
     Ok(())
 }
@@ -65,7 +67,7 @@ pub fn cmd_clean(
 
 pub fn cmd_tui(env: &Env) -> Result<()> {
     let theme = env.config.theme.unwrap_or_else(detect_from_env);
-    let app = App::new(theme, env.first_run);
+    let app = App::new(theme, env.first_run, is_root());
     run(app, build_scan_job(env), build_delete_runner())?;
     Ok(())
 }
@@ -93,7 +95,7 @@ fn build_delete_runner() -> DeleteRunner {
             });
             if entry.kind == CleanupKind::NativeCommand {
                 if let Some(spec) = &entry.native {
-                    let _ = docker::run_clean(spec);
+                    let _ = native::run_spec(spec);
                 }
                 freed += entry.physical_bytes;
                 count += 1;
@@ -139,7 +141,7 @@ fn build_scan_job(env: &Env) -> ScanJob {
             config: &config,
             home: &home,
         };
-        let result = scan_with_progress(
+        let mut result = scan_with_progress(
             &ctx,
             &categories,
             docker::estimate,
@@ -152,6 +154,17 @@ fn build_scan_job(env: &Env) -> ScanJob {
                 });
             },
         );
+        if is_root() {
+            let _ = tx.send(ScanMsg::Progress {
+                message: "Снимки Time Machine…".into(),
+                done: 0,
+                total: 0,
+                bytes: result.total_bytes,
+            });
+            if let Some(cat) = snapshot_category() {
+                result.categories.push(cat);
+            }
+        }
         let _ = tx.send(ScanMsg::Done(result));
     })
 }

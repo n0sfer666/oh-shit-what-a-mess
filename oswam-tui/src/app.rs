@@ -81,11 +81,12 @@ pub struct App {
     pub confirm_open: bool,
     pub confirm_choice: usize,
     pub pending_delete: Option<Disposition>,
+    pub elevated: bool,
     pub(crate) first_run: bool,
 }
 
 impl App {
-    pub fn new(theme: Theme, first_run: bool) -> Self {
+    pub fn new(theme: Theme, first_run: bool, elevated: bool) -> Self {
         Self {
             phase: Phase::Welcome,
             scan: ScanState::default(),
@@ -108,6 +109,7 @@ impl App {
             confirm_open: false,
             confirm_choice: 0,
             pending_delete: None,
+            elevated,
             first_run,
         }
     }

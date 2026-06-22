@@ -14,20 +14,35 @@ pub fn render_welcome(frame: &mut Frame, app: &App, area: Rect) {
         .borders(Borders::ALL)
         .title(" OSWaM ")
         .border_style(Style::default().fg(pal.accent));
-    let text = vec![
+    let mut text = vec![
         Line::raw(""),
         Line::raw("OSWaM — безопасная очистка места на macOS"),
         Line::raw(""),
         Line::raw("Найдём кэши, dev-артефакты, Docker, логи и корзину,"),
         Line::raw("покажем физически освобождаемое место."),
         Line::raw(""),
-        Line::styled(
-            "Enter — просканировать систему",
-            Style::default().fg(pal.accent),
-        ),
-        Line::raw("q — выход"),
     ];
-    let popup = centered(area, 60, 12);
+    if app.elevated {
+        text.push(Line::styled(
+            "Режим sudo: + снимки Time Machine (последний сохраняется)",
+            Style::default().fg(pal.accent),
+        ));
+    } else {
+        text.push(Line::styled(
+            "Без sudo. Для снимков Time Machine: перезапусти `sudo oswam`.",
+            Style::default().fg(pal.muted),
+        ));
+        text.push(Line::styled(
+            "Снимки — не замена бэкапу; последний снимок не удаляем.",
+            Style::default().fg(pal.muted),
+        ));
+    }
+    text.push(Line::raw(""));
+    text.push(Line::styled(
+        "Enter — просканировать систему    ·    q — выход",
+        Style::default().fg(pal.accent),
+    ));
+    let popup = centered(area, 64, 14);
     frame.render_widget(Clear, popup);
     frame.render_widget(
         Paragraph::new(text)

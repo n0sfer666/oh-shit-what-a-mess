@@ -41,15 +41,7 @@ pub fn estimate(spec: &NativeSpec) -> Option<u64> {
 }
 
 pub fn run_clean(spec: &NativeSpec) -> io::Result<String> {
-    let mut cmd = build_command(&spec.clean)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "empty native command"))?;
-    let out = cmd.output()?;
-    if !out.status.success() {
-        return Err(io::Error::other(
-            String::from_utf8_lossy(&out.stderr).to_string(),
-        ));
-    }
-    Ok(String::from_utf8_lossy(&out.stdout).to_string())
+    crate::native::run_spec(spec)
 }
 
 fn build_command(parts: &[String]) -> Option<Command> {
