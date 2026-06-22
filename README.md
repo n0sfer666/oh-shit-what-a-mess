@@ -10,9 +10,17 @@
 ## Установка
 
 ```sh
-cargo build --release
-./target/release/oswam
+./install.sh            # собирает release и ставит `oswam` в ~/.cargo/bin
+oswam                   # запуск
 ```
+
+`./install.sh uninstall` — удалить. Альтернативно, без установки:
+
+```sh
+cargo build --release && ./target/release/oswam
+```
+
+Требуется Rust (`cargo`): https://rustup.rs. Каталог `~/.cargo/bin` должен быть в `PATH`.
 
 ## Использование
 
