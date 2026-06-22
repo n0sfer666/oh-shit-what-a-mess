@@ -69,7 +69,7 @@ where
     for cat in categories {
         let mut entries = Vec::new();
         for target in &cat.targets {
-            if let Some(entry) = process_target(ctx, target, &native_size) {
+            for entry in process_target(ctx, target, &native_size) {
                 grand_total += entry.physical_bytes;
                 entries.push(entry);
             }
@@ -95,43 +95,75 @@ fn process_target<F, P, N>(
     ctx: &ScanCtx<'_, F, P>,
     target: &crate::category::Target,
     native_size: &N,
-) -> Option<ScanEntry>
+) -> Vec<ScanEntry>
 where
     F: FsOps,
     P: ProcessProbe,
     N: Fn(&NativeSpec) -> Option<u64>,
 {
     if let Some(spec) = &target.native {
-        let bytes = native_size(spec)?;
-        return Some(ScanEntry {
-            display: target.path.clone(),
-            path: PathBuf::from(&target.path),
-            kind: target.kind,
-            risk: target.risk,
-            physical_bytes: bytes,
-            native: Some(spec.clone()),
-        });
+        return native_size(spec)
+            .map(|bytes| ScanEntry {
+                display: target.path.clone(),
+                path: PathBuf::from(&target.path),
+                kind: target.kind,
+                risk: target.risk,
+                physical_bytes: bytes,
+                native: Some(spec.clone()),
+            })
+            .into_iter()
+            .collect();
     }
-    let expanded = expand_tilde(&target.path, ctx.home);
-    if ctx.config.is_ignored(&expanded) {
+    let root = expand_tilde(&target.path, ctx.home);
+    if !target.enumerate {
+        return entry_for(ctx, target, &root, &target.path)
+            .into_iter()
+            .collect();
+    }
+    let Ok(children) = ctx.fs.read_dir(&root) else {
+        return Vec::new();
+    };
+    children
+        .into_iter()
+        .filter_map(|child| {
+            let display = child
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| child.to_string_lossy().into_owned());
+            entry_for(ctx, target, &child, &display)
+        })
+        .collect()
+}
+
+fn entry_for<F, P>(
+    ctx: &ScanCtx<'_, F, P>,
+    target: &crate::category::Target,
+    path: &Path,
+    display: &str,
+) -> Option<ScanEntry>
+where
+    F: FsOps,
+    P: ProcessProbe,
+{
+    if ctx.config.is_ignored(path) {
         return None;
     }
-    let meta = ctx.fs.meta(&expanded).ok()?;
+    let meta = ctx.fs.meta(path).ok()?;
     let facts = facts_from_meta(
-        &expanded,
+        path,
         &meta,
-        ctx.config.is_protected(&expanded, ctx.home),
-        ctx.probe.holds(&expanded),
+        ctx.config.is_protected(path, ctx.home),
+        ctx.probe.holds(path),
     );
     let risk = if target.kind == CleanupKind::InfoOnly {
         target.risk.max(RiskLevel::Caution)
     } else {
         classify(&facts, target.risk)
     };
-    let physical_bytes = physical_size(ctx.fs, &expanded).unwrap_or(0);
+    let physical_bytes = physical_size(ctx.fs, path).unwrap_or(0);
     Some(ScanEntry {
-        display: target.path.clone(),
-        path: expanded,
+        display: display.to_string(),
+        path: path.to_path_buf(),
         kind: target.kind,
         risk,
         physical_bytes,
@@ -192,12 +224,57 @@ mod tests {
                 kind: CleanupKind::DeleteContents,
                 risk: RiskLevel::Safe,
                 native: None,
+                enumerate: false,
             }],
         }];
         let res = scan(&ctx, &cats, |_| None);
         let entry = &res.categories[0].entries[0];
         assert_eq!(entry.physical_bytes, (8 + 10) * 512);
         assert_eq!(entry.risk, RiskLevel::Safe);
+    }
+
+    #[test]
+    fn enumerate_expands_children_into_entries() {
+        let mut fs = FakeFs::default();
+        fs.dir(
+            "/Users/n0sfer/Library/Caches",
+            &[
+                "/Users/n0sfer/Library/Caches/Homebrew",
+                "/Users/n0sfer/Library/Caches/Yarn",
+            ],
+        );
+        fs.dir("/Users/n0sfer/Library/Caches/Homebrew", &[]);
+        fs.dir("/Users/n0sfer/Library/Caches/Yarn", &[]);
+        let probe = LsofProbe::from_paths(vec![]);
+        let config = Config::default();
+        let home = Path::new("/Users/n0sfer");
+        let ctx = ScanCtx {
+            fs: &fs,
+            probe: &probe,
+            config: &config,
+            home,
+        };
+        let cats = vec![Category {
+            id: "system",
+            name: "S",
+            glyph: "s",
+            targets: vec![Target {
+                path: "~/Library/Caches".into(),
+                kind: CleanupKind::DeleteContents,
+                risk: RiskLevel::Safe,
+                native: None,
+                enumerate: true,
+            }],
+        }];
+        let res = scan(&ctx, &cats, |_| None);
+        let displays: Vec<&str> = res.categories[0]
+            .entries
+            .iter()
+            .map(|e| e.display.as_str())
+            .collect();
+        assert!(displays.contains(&"Homebrew"));
+        assert!(displays.contains(&"Yarn"));
+        assert_eq!(res.categories[0].entries.len(), 2);
     }
 
     #[test]
@@ -223,6 +300,7 @@ mod tests {
                 kind: CleanupKind::DeleteContents,
                 risk: RiskLevel::Safe,
                 native: None,
+                enumerate: false,
             }],
         }];
         let res = scan(&ctx, &cats, |_| None);

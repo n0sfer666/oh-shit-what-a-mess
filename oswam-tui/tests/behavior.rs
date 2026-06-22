@@ -145,13 +145,14 @@ fn theme_toggle() {
 }
 
 #[test]
-fn proceed_opens_confirm_then_enter_decides() {
+fn proceed_opens_confirm_then_enter_triggers_delete() {
     let mut a = results_app(false);
     a.on_key(Key::Proceed);
     assert!(a.confirm_open);
     a.on_key(Key::Down);
     a.on_key(Key::Enter);
-    assert_eq!(a.decision, Some(Disposition::Permanent));
+    assert!(!a.confirm_open);
+    assert_eq!(a.pending_delete, Some(Disposition::Permanent));
 }
 
 #[test]
@@ -160,7 +161,20 @@ fn confirm_cancel_closes_modal() {
     a.on_key(Key::Proceed);
     a.on_key(Key::Cancel);
     assert!(!a.confirm_open);
-    assert_eq!(a.decision, None);
+    assert_eq!(a.pending_delete, None);
+}
+
+#[test]
+fn deleting_phase_summary_and_done_quit() {
+    let mut a = results_app(false);
+    a.update_delete("чищу".into(), 1, 3, 1000);
+    assert_eq!(a.phase, Phase::Deleting);
+    a.on_key(Key::Quit);
+    assert!(!a.should_quit);
+    a.set_summary(3, 5000, true);
+    assert_eq!(a.phase, Phase::Done);
+    a.on_key(Key::Quit);
+    assert!(a.should_quit);
 }
 
 #[test]

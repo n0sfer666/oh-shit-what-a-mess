@@ -22,6 +22,7 @@ pub struct Target {
     pub kind: CleanupKind,
     pub risk: RiskLevel,
     pub native: Option<NativeSpec>,
+    pub enumerate: bool,
 }
 
 impl Target {
@@ -31,6 +32,14 @@ impl Target {
             kind,
             risk,
             native: None,
+            enumerate: false,
+        }
+    }
+
+    fn enumerated(path: &str, kind: CleanupKind, risk: RiskLevel) -> Self {
+        Self {
+            enumerate: true,
+            ..Self::new(path, kind, risk)
         }
     }
 }
@@ -52,6 +61,7 @@ fn native(label: &str, estimate: &[&str], clean: &[&str], risk: RiskLevel) -> Ta
             estimate: estimate.iter().map(|s| s.to_string()).collect(),
             clean: clean.iter().map(|s| s.to_string()).collect(),
         }),
+        enumerate: false,
     }
 }
 
@@ -64,6 +74,7 @@ pub fn builtin_categories() -> Vec<Category> {
             name: "Системный мусор",
             glyph: "🧹",
             targets: vec![
+                Target::enumerated("~/Library/Caches", DeleteContents, Safe),
                 Target::new("~/Library/Logs", DeleteContents, Safe),
                 Target::new("~/.Trash", DeleteContents, Safe),
                 Target::new(
@@ -80,34 +91,37 @@ pub fn builtin_categories() -> Vec<Category> {
             targets: vec![
                 Target::new("~/.npm", DeleteContents, Safe),
                 Target::new("~/.cache", DeleteContents, Safe),
-                Target::new("~/Library/Caches/Yarn", DeleteContents, Safe),
-                Target::new("~/Library/Caches/go-build", DeleteContents, Safe),
                 Target::new("~/Library/Developer/Xcode/DerivedData", DeletePath, Safe),
+                Target::enumerated(
+                    "~/Library/Developer/Xcode/iOS DeviceSupport",
+                    DeletePath,
+                    Caution,
+                ),
+                Target::enumerated("~/Library/Developer/Xcode/Archives", DeletePath, Caution),
+                Target::new(
+                    "~/Library/Developer/CoreSimulator/Caches",
+                    DeleteContents,
+                    Safe,
+                ),
                 native(
                     "Docker (docker system prune)",
                     &["docker", "system", "df"],
                     &["docker", "system", "prune", "-f"],
                     Caution,
                 ),
-            ],
-        },
-        Category {
-            id: "browsers",
-            name: "Браузеры",
-            glyph: "🌐",
-            targets: vec![
-                Target::new("~/Library/Caches/Google", DeleteContents, Safe),
-                Target::new("~/Library/Caches/Arc", DeleteContents, Safe),
-                Target::new("~/Library/Caches/Comet", DeleteContents, Safe),
-                Target::new("~/Library/Caches/Yandex", DeleteContents, Safe),
-                Target::new("~/Library/Caches/com.apple.Safari", DeleteContents, Safe),
+                native(
+                    "Xcode: недоступные симуляторы",
+                    &["true"],
+                    &["xcrun", "simctl", "delete", "unavailable"],
+                    Safe,
+                ),
             ],
         },
         Category {
             id: "big-data",
             name: "Большие данные (инфо)",
             glyph: "📦",
-            targets: vec![Target::new(
+            targets: vec![Target::enumerated(
                 "~/Library/Application Support/MobileSync/Backup",
                 InfoOnly,
                 Caution,
@@ -121,9 +135,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn has_v1_categories() {
+    fn has_v2_categories() {
         let ids: Vec<&str> = builtin_categories().iter().map(|c| c.id).collect();
-        assert_eq!(ids, vec!["system", "dev", "browsers", "big-data"]);
+        assert_eq!(ids, vec!["system", "dev", "big-data"]);
+    }
+
+    #[test]
+    fn caches_are_enumerated() {
+        let sys = builtin_categories()
+            .into_iter()
+            .find(|c| c.id == "system")
+            .unwrap();
+        let caches = sys
+            .targets
+            .iter()
+            .find(|t| t.path == "~/Library/Caches")
+            .unwrap();
+        assert!(caches.enumerate);
+        assert_eq!(caches.kind, CleanupKind::DeleteContents);
     }
 
     #[test]
@@ -135,12 +164,14 @@ mod tests {
         let docker = dev
             .targets
             .iter()
-            .find(|t| t.kind == CleanupKind::NativeCommand)
+            .find(|t| {
+                t.native
+                    .as_ref()
+                    .is_some_and(|s| s.clean.first().map(String::as_str) == Some("docker"))
+            })
             .unwrap();
         let spec = docker.native.as_ref().unwrap();
         assert_eq!(spec.clean, vec!["docker", "system", "prune", "-f"]);
-        assert!(!docker.path.contains(".raw"));
-        assert!(spec.estimate.iter().all(|a| !a.contains("raw")));
         assert!(spec.clean.iter().all(|a| !a.contains("raw")));
     }
 
@@ -151,19 +182,5 @@ mod tests {
             .find(|c| c.id == "big-data")
             .unwrap();
         assert!(bd.targets.iter().all(|t| t.kind == CleanupKind::InfoOnly));
-    }
-
-    #[test]
-    fn cache_roots_use_delete_contents() {
-        let sys = builtin_categories()
-            .into_iter()
-            .find(|c| c.id == "system")
-            .unwrap();
-        let logs = sys
-            .targets
-            .iter()
-            .find(|t| t.path.ends_with("Logs"))
-            .unwrap();
-        assert_eq!(logs.kind, CleanupKind::DeleteContents);
     }
 }

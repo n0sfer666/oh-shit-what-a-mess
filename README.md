@@ -51,6 +51,17 @@ oswam clean --safe --delete --yes       # безвозвратно
 `j/k ↑↓` движение · `h/l` / `Tab` панели · `g/G` край · `Space` выбор · `o` группировка ·
 `t` тема · `Ctrl+P` удалить · `?` справка · `q` выход.
 
+## Что чистится
+
+- **Системный мусор**: весь `~/Library/Caches/*` (по приложению — Steam, Cypress, Firefox,
+  deno, next-swc и т.д.), `~/Library/Logs`, корзина.
+- **Dev-окружение**: `~/.npm`, `~/.cache`, Xcode DerivedData/iOS DeviceSupport/Archives,
+  CoreSimulator, Docker (`docker system prune`), недоступные симуляторы (`xcrun simctl delete unavailable`).
+- **Большие данные (инфо)**: iOS-бэкапы (MobileSync) — только показ.
+
+Часть «System Data» требует sudo и в v1 не трогается — `oswam scan` подсказывает, что ещё можно
+освободить вручную (локальные снимки Time Machine `sudo tmutil thinlocalsnapshots /`, `/Library/Caches`).
+
 ## Архитектура
 
 Cargo workspace: `oswam-core` (логика, без UI) · `oswam-tui` (ratatui) · `oswam-cli` (точка входа).

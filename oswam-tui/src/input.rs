@@ -9,6 +9,12 @@ impl App {
             Phase::Welcome => self.on_welcome_key(key),
             Phase::Scanning => self.on_scanning_key(key),
             Phase::Results => self.on_results_key(key),
+            Phase::Deleting => {}
+            Phase::Done => {
+                if matches!(key, Key::Quit | Key::Cancel | Key::Enter) {
+                    self.should_quit = true;
+                }
+            }
         }
     }
 
@@ -64,11 +70,12 @@ impl App {
         match key {
             Key::Up | Key::Down => self.confirm_choice ^= 1,
             Key::Enter => {
-                self.decision = Some(if self.confirm_choice == 0 {
+                self.pending_delete = Some(if self.confirm_choice == 0 {
                     Disposition::Trash
                 } else {
                     Disposition::Permanent
                 });
+                self.confirm_open = false;
             }
             Key::Cancel | Key::Quit => self.confirm_open = false,
             _ => {}
