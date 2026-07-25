@@ -1,6 +1,7 @@
 use crate::category::NativeSpec;
+use std::collections::HashMap;
 use std::io;
-use std::process::Command;
+use std::sync::{Mutex, OnceLock};
 
 pub fn parse_human_size(raw: &str) -> Option<u64> {
     let s = raw.trim();
@@ -23,55 +24,88 @@ pub fn parse_human_size(raw: &str) -> Option<u64> {
 }
 
 pub fn parse_reclaimable(output: &str) -> u64 {
+    parse_reclaimable_filtered(output, &[])
+}
+
+pub fn parse_reclaimable_filtered(output: &str, types: &[String]) -> u64 {
     output
         .lines()
-        .filter_map(|l| l.split_whitespace().next())
-        .filter_map(parse_human_size)
+        .filter_map(split_row)
+        .filter(|(ty, _)| types.is_empty() || types.iter().any(|t| t == ty))
+        .filter_map(|(_, size)| parse_human_size(size.split_whitespace().next()?))
         .sum()
 }
 
-pub fn estimate(spec: &NativeSpec) -> Option<u64> {
-    let mut cmd = build_command(&spec.estimate)?;
-    cmd.args(["--format", "{{.Reclaimable}}"]);
-    let out = cmd.output().ok()?;
-    if !out.status.success() {
+pub fn parse_reclaimed(output: &str) -> Option<u64> {
+    output
+        .lines()
+        .find_map(|line| line.split_once("reclaimed space:"))
+        .and_then(|(_, size)| parse_human_size(size.trim()))
+}
+
+fn split_row(line: &str) -> Option<(&str, &str)> {
+    if line.trim().is_empty() {
         return None;
     }
-    Some(parse_reclaimable(&String::from_utf8_lossy(&out.stdout)))
+    Some(match line.split_once('\t') {
+        Some((ty, size)) => (ty.trim(), size),
+        None => ("", line),
+    })
+}
+
+pub fn estimate(spec: &NativeSpec) -> Option<u64> {
+    for probe in &spec.probe {
+        cached_output(probe, spec.privileged)?;
+    }
+    if spec.estimate.is_empty() {
+        return Some(0);
+    }
+    let text = cached_output(&spec.estimate, spec.privileged)?;
+    Some(if spec.estimate_filter.is_empty() {
+        parse_reclaimable(&text)
+    } else {
+        parse_reclaimable_filtered(&text, &spec.estimate_filter)
+    })
+}
+
+type OutputCache = Mutex<HashMap<(Vec<String>, bool), Option<String>>>;
+
+fn cache() -> &'static OutputCache {
+    static CACHE: OnceLock<OutputCache> = OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+pub fn clear_estimates() {
+    if let Ok(mut map) = cache().lock() {
+        map.clear();
+    }
+}
+
+fn cached_output(command: &[String], privileged: bool) -> Option<String> {
+    let key = (command.to_vec(), privileged);
+    if let Ok(map) = cache().lock() {
+        if let Some(hit) = map.get(&key) {
+            return hit.clone();
+        }
+    }
+    let fresh = run_output(command, privileged);
+    if let Ok(mut map) = cache().lock() {
+        map.insert(key, fresh.clone());
+    }
+    fresh
+}
+
+fn run_output(command: &[String], privileged: bool) -> Option<String> {
+    match crate::native::command(command, privileged)?.output() {
+        Err(_) => None,
+        Ok(out) if !out.status.success() => None,
+        Ok(out) => Some(String::from_utf8_lossy(&out.stdout).to_string()),
+    }
 }
 
 pub fn run_clean(spec: &NativeSpec) -> io::Result<String> {
     crate::native::run_spec(spec)
 }
 
-fn build_command(parts: &[String]) -> Option<Command> {
-    let (program, args) = parts.split_first()?;
-    let mut cmd = Command::new(program);
-    cmd.args(args);
-    Some(cmd)
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_units() {
-        assert_eq!(parse_human_size("0B"), Some(0));
-        assert_eq!(parse_human_size("1.5GB"), Some(1_500_000_000));
-        assert_eq!(parse_human_size("100MB"), Some(100_000_000));
-        assert_eq!(parse_human_size("2KiB"), Some(2048));
-    }
-
-    #[test]
-    fn rejects_garbage() {
-        assert_eq!(parse_human_size("abc"), None);
-        assert_eq!(parse_human_size("5XB"), None);
-    }
-
-    #[test]
-    fn sums_reclaimable_column() {
-        let out = "1.5GB (50%)\n200MB (10%)\n0B (0%)\n";
-        assert_eq!(parse_reclaimable(out), 1_700_000_000);
-    }
-}
+mod tests;

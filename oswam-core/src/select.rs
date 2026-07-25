@@ -43,7 +43,14 @@ mod tests {
             native: matches!(kind, CleanupKind::NativeCommand).then(|| NativeSpec {
                 estimate: vec![],
                 clean: vec![],
+                ..NativeSpec::default()
             }),
+            companions: Vec::new(),
+            shared_bytes: 0,
+            size_unknown: false,
+            partial: false,
+            needs_root: false,
+            permanent_only: false,
         }
     }
 

@@ -1,6 +1,8 @@
 use crate::risk::RiskLevel;
 use serde::{Deserialize, Serialize};
 
+pub use crate::registry::builtin_categories;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CleanupKind {
@@ -10,10 +12,16 @@ pub enum CleanupKind {
     InfoOnly,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct NativeSpec {
     pub estimate: Vec<String>,
     pub clean: Vec<String>,
+    #[serde(default)]
+    pub estimate_filter: Vec<String>,
+    #[serde(default)]
+    pub probe: Vec<Vec<String>>,
+    #[serde(default)]
+    pub privileged: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -23,24 +31,63 @@ pub struct Target {
     pub risk: RiskLevel,
     pub native: Option<NativeSpec>,
     pub enumerate: bool,
+    pub discover: Option<Vec<&'static str>>,
+    pub depth: usize,
+    pub needs_root: bool,
+    pub group_by_stem: bool,
+    pub measured: bool,
 }
 
 impl Target {
-    fn new(path: &str, kind: CleanupKind, risk: RiskLevel) -> Self {
+    pub fn new(path: &str, kind: CleanupKind, risk: RiskLevel) -> Self {
         Self {
             path: path.to_string(),
             kind,
             risk,
             native: None,
             enumerate: false,
+            discover: None,
+            depth: 0,
+            needs_root: false,
+            group_by_stem: false,
+            measured: false,
         }
     }
 
-    fn enumerated(path: &str, kind: CleanupKind, risk: RiskLevel) -> Self {
+    pub fn enumerated(path: &str, kind: CleanupKind, risk: RiskLevel) -> Self {
         Self {
             enumerate: true,
             ..Self::new(path, kind, risk)
         }
+    }
+
+    pub fn grouped(path: &str, kind: CleanupKind, risk: RiskLevel) -> Self {
+        Self {
+            group_by_stem: true,
+            ..Self::enumerated(path, kind, risk)
+        }
+    }
+
+    pub fn discovered(
+        root: &str,
+        names: Vec<&'static str>,
+        depth: usize,
+        kind: CleanupKind,
+        risk: RiskLevel,
+    ) -> Self {
+        Self {
+            discover: Some(names),
+            depth,
+            ..Self::new(root, kind, risk)
+        }
+    }
+
+    pub fn needing_root(mut self) -> Self {
+        self.needs_root = true;
+        if let Some(spec) = self.native.as_mut() {
+            spec.privileged = true;
+        }
+        self
     }
 }
 
@@ -52,135 +99,30 @@ pub struct Category {
     pub targets: Vec<Target>,
 }
 
-fn native(label: &str, estimate: &[&str], clean: &[&str], risk: RiskLevel) -> Target {
-    Target {
-        path: label.to_string(),
-        kind: CleanupKind::NativeCommand,
-        risk,
-        native: Some(NativeSpec {
-            estimate: estimate.iter().map(|s| s.to_string()).collect(),
-            clean: clean.iter().map(|s| s.to_string()).collect(),
-        }),
-        enumerate: false,
-    }
-}
-
-pub fn builtin_categories() -> Vec<Category> {
-    use CleanupKind::*;
-    use RiskLevel::*;
-    vec![
-        Category {
-            id: "system",
-            name: "Системный мусор",
-            glyph: "🧹",
-            targets: vec![
-                Target::enumerated("~/Library/Caches", DeleteContents, Safe),
-                Target::new("~/Library/Logs", DeleteContents, Safe),
-                Target::new("~/.Trash", DeleteContents, Safe),
-                Target::new(
-                    "~/Library/Caches/com.apple.QuickLook.thumbnailcache",
-                    DeletePath,
-                    Safe,
-                ),
-            ],
-        },
-        Category {
-            id: "dev",
-            name: "Dev-окружение",
-            glyph: "🛠",
-            targets: vec![
-                Target::new("~/.npm", DeleteContents, Safe),
-                Target::new("~/.cache", DeleteContents, Safe),
-                Target::new("~/Library/Developer/Xcode/DerivedData", DeletePath, Safe),
-                Target::enumerated(
-                    "~/Library/Developer/Xcode/iOS DeviceSupport",
-                    DeletePath,
-                    Caution,
-                ),
-                Target::enumerated("~/Library/Developer/Xcode/Archives", DeletePath, Caution),
-                Target::new(
-                    "~/Library/Developer/CoreSimulator/Caches",
-                    DeleteContents,
-                    Safe,
-                ),
-                native(
-                    "Docker (docker system prune)",
-                    &["docker", "system", "df"],
-                    &["docker", "system", "prune", "-f"],
-                    Caution,
-                ),
-                native(
-                    "Xcode: недоступные симуляторы",
-                    &["true"],
-                    &["xcrun", "simctl", "delete", "unavailable"],
-                    Safe,
-                ),
-            ],
-        },
-        Category {
-            id: "big-data",
-            name: "Большие данные (инфо)",
-            glyph: "📦",
-            targets: vec![Target::enumerated(
-                "~/Library/Application Support/MobileSync/Backup",
-                InfoOnly,
-                Caution,
-            )],
-        },
-    ]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn has_v2_categories() {
-        let ids: Vec<&str> = builtin_categories().iter().map(|c| c.id).collect();
-        assert_eq!(ids, vec!["system", "dev", "big-data"]);
-    }
+    fn constructors_set_flags() {
+        let plain = Target::new("~/x", CleanupKind::DeleteContents, RiskLevel::Safe);
+        assert!(!plain.enumerate);
+        assert!(plain.discover.is_none());
 
-    #[test]
-    fn caches_are_enumerated() {
-        let sys = builtin_categories()
-            .into_iter()
-            .find(|c| c.id == "system")
-            .unwrap();
-        let caches = sys
-            .targets
-            .iter()
-            .find(|t| t.path == "~/Library/Caches")
-            .unwrap();
-        assert!(caches.enumerate);
-        assert_eq!(caches.kind, CleanupKind::DeleteContents);
-    }
+        let enumd = Target::enumerated("~/y", CleanupKind::DeletePath, RiskLevel::Caution);
+        assert!(enumd.enumerate);
 
-    #[test]
-    fn docker_is_native_and_never_touches_raw() {
-        let dev = builtin_categories()
-            .into_iter()
-            .find(|c| c.id == "dev")
-            .unwrap();
-        let docker = dev
-            .targets
-            .iter()
-            .find(|t| {
-                t.native
-                    .as_ref()
-                    .is_some_and(|s| s.clean.first().map(String::as_str) == Some("docker"))
-            })
-            .unwrap();
-        let spec = docker.native.as_ref().unwrap();
-        assert_eq!(spec.clean, vec!["docker", "system", "prune", "-f"]);
-        assert!(spec.clean.iter().all(|a| !a.contains("raw")));
-    }
-
-    #[test]
-    fn big_data_is_info_only() {
-        let bd = builtin_categories()
-            .into_iter()
-            .find(|c| c.id == "big-data")
-            .unwrap();
-        assert!(bd.targets.iter().all(|t| t.kind == CleanupKind::InfoOnly));
+        let disc = Target::discovered(
+            "~/_dev",
+            vec!["target", "node_modules"],
+            4,
+            CleanupKind::DeletePath,
+            RiskLevel::Caution,
+        );
+        assert_eq!(
+            disc.discover.as_deref(),
+            Some(&["target", "node_modules"][..])
+        );
+        assert!(!disc.enumerate);
     }
 }

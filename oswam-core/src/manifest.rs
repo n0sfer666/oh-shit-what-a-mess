@@ -28,6 +28,14 @@ impl Manifest {
         self.entries.iter().map(|e| e.physical_bytes).sum()
     }
 
+    pub fn bytes_with_action(&self, action: &str) -> u64 {
+        self.entries
+            .iter()
+            .filter(|e| e.action == action)
+            .map(|e| e.physical_bytes)
+            .sum()
+    }
+
     pub fn to_json(&self) -> serde_json::Result<String> {
         serde_json::to_string_pretty(self)
     }
@@ -48,6 +56,16 @@ mod tests {
         m.record(Path::new("/b"), 50, "permanent", "2026-06-22T00:00:01Z");
         assert_eq!(m.total_bytes(), 150);
         assert_eq!(m.entries.len(), 2);
+    }
+
+    #[test]
+    fn bytes_are_split_by_action() {
+        let mut m = Manifest::default();
+        m.record(Path::new("/a"), 100, "trash", "t");
+        m.record(Path::new("/b"), 50, "permanent", "t");
+        assert_eq!(m.bytes_with_action("trash"), 100);
+        assert_eq!(m.bytes_with_action("permanent"), 50);
+        assert_eq!(m.bytes_with_action("native"), 0);
     }
 
     #[test]

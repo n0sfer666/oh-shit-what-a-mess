@@ -1,13 +1,13 @@
 use crate::app::{App, Panel};
+use crate::describe::{empty_note, what_is_it, why_text};
+use crate::explain::{action_text, select_hint, size_line};
 use crate::theme::{palette, risk_color, risk_symbol};
-use oswam_core::category::CleanupKind;
-use oswam_core::format::human_bytes;
-use oswam_core::risk::RiskLevel;
 use oswam_core::scan::ScanEntry;
+use oswam_core::select::is_deletable;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Row, Table, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Row, Table, TableState, Wrap};
 use ratatui::Frame;
 
 pub fn focus_block(title: &str, focused: bool, app: &App) -> Block<'static> {
@@ -20,31 +20,27 @@ pub fn focus_block(title: &str, focused: bool, app: &App) -> Block<'static> {
         .title_style(Style::default().fg(pal.accent))
 }
 
-fn action_text(entry: &ScanEntry) -> String {
-    match entry.kind {
-        CleanupKind::DeleteContents => "Удалит содержимое (Корзина/безвозвратно по выбору)".into(),
-        CleanupKind::DeletePath => "Удалит каталог целиком".into(),
-        CleanupKind::NativeCommand => match &entry.native {
-            Some(spec) => format!("Выполнит: {}", spec.clean.join(" ")),
-            None => "Нативная команда".into(),
-        },
-        CleanupKind::InfoOnly => "Только информация — удаление недоступно".into(),
-    }
-}
-
-fn why_text(risk: RiskLevel) -> &'static str {
-    match risk {
-        RiskLevel::Safe => "Безопасно: регенерируемый кэш, приложение пересоздаст.",
-        RiskLevel::Caution => "Осторожно: возможно используется процессом или частично нужное.",
-        RiskLevel::Danger => "Опасно: удаление может повлиять на работу.",
-        RiskLevel::Never => "Никогда: системное/защищённое, удаление заблокировано.",
-    }
-}
-
 pub fn render_description(frame: &mut Frame, app: &App, area: Rect) {
     let focused = app.panel == Panel::Description;
     let block = focus_block("Описание", focused, app);
-    let lines = match current_entry(app) {
+    app.desc_view.observe(block.inner(area));
+    let lines = description_lines(app);
+    let offset = app.desc_scroll.min(app.desc_view.max_scroll(&lines));
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .scroll((offset, 0))
+            .wrap(Wrap { trim: false }),
+        area,
+    );
+}
+
+pub fn description_lines(app: &App) -> Vec<Line<'static>> {
+    let category_id = app
+        .current_category()
+        .map(|ci| app.result.categories[ci].id.as_str())
+        .unwrap_or("");
+    match current_entry(app) {
         Some(entry) => vec![
             Line::from(vec![
                 Span::styled(
@@ -53,18 +49,20 @@ pub fn render_description(frame: &mut Frame, app: &App, area: Rect) {
                 ),
                 Span::raw(format!(" {:?}", entry.risk)),
             ]),
+            Line::styled(
+                size_line(entry),
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
+            Line::raw(what_is_it(category_id, entry)),
             Line::raw(why_text(entry.risk)),
-            Line::raw(""),
             Line::raw(action_text(entry)),
+            Line::styled(
+                select_hint(entry),
+                Style::default().fg(palette(app.theme).muted),
+            ),
         ],
-        None => vec![Line::raw("Нет данных для отображения.")],
-    };
-    frame.render_widget(
-        Paragraph::new(lines)
-            .block(block)
-            .wrap(Wrap { trim: false }),
-        area,
-    );
+        None => vec![Line::raw(empty_note(category_id, app.elevated))],
+    }
 }
 
 pub fn render_table(frame: &mut Frame, app: &App, area: Rect) {
@@ -76,7 +74,9 @@ pub fn render_table(frame: &mut Frame, app: &App, area: Rect) {
             .iter()
             .enumerate()
             .map(|(ei, e)| {
-                let mark = if app.is_selected(ci, ei) {
+                let mark = if !is_deletable(e) {
+                    " ⓘ "
+                } else if app.is_selected(ci, ei) {
                     "[x]"
                 } else {
                     "[ ]"
@@ -87,7 +87,7 @@ pub fn render_table(frame: &mut Frame, app: &App, area: Rect) {
                 }
                 Row::new(vec![
                     format!("{mark} {} {}", risk_symbol(e.risk), e.display),
-                    human_bytes(e.physical_bytes),
+                    e.size_label(),
                 ])
                 .style(style)
             })
@@ -98,7 +98,11 @@ pub fn render_table(frame: &mut Frame, app: &App, area: Rect) {
         ratatui::layout::Constraint::Min(10),
         ratatui::layout::Constraint::Length(10),
     ];
-    frame.render_widget(Table::new(rows, widths).block(block), area);
+    let mut state = TableState::default();
+    if !rows.is_empty() {
+        state.select(Some(app.file_cursor.min(rows.len() - 1)));
+    }
+    frame.render_stateful_widget(Table::new(rows, widths).block(block), area, &mut state);
 }
 
 pub fn render_help(frame: &mut Frame, app: &App, area: Rect) {
@@ -107,25 +111,32 @@ pub fn render_help(frame: &mut Frame, app: &App, area: Rect) {
         .borders(Borders::ALL)
         .title(" Справка (любая клавиша — закрыть, ↑↓hjkl — скролл) ")
         .border_style(Style::default().fg(pal.accent));
-    let text = vec![
-        Line::raw("Навигация:  j/k ↑/↓  ·  h/l панели  ·  Tab  ·  g/G  ·  Ctrl+d/Ctrl+u"),
+    let popup = centered(area, 70, 12);
+    app.help_view.observe(block.inner(popup));
+    let lines = help_lines();
+    let offset = app.help_scroll.min(app.help_view.max_scroll(&lines));
+    frame.render_widget(Clear, popup);
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .scroll((offset, 0))
+            .wrap(Wrap { trim: false }),
+        popup,
+    );
+}
+
+pub fn help_lines() -> Vec<Line<'static>> {
+    vec![
+        Line::raw("Навигация:  j/k ↑/↓  ·  h/l панели  ·  Tab  ·  g/G"),
         Line::raw("Space      выбрать категорию/файл"),
+        Line::raw("j/k в «Описании» — прокрутка текста"),
         Line::raw("o          группировка (категория/размер/риск)"),
         Line::raw("t          тема (тёмная/светлая)"),
         Line::raw("Ctrl+P     удалить выбранное (Корзина/безвозвратно)"),
         Line::raw("?          справка   ·   q  выход"),
         Line::raw(""),
         Line::raw("Цвет + символ риска: ✓ Safe · ▲ Caution · ✗ Danger · ⛔ Never"),
-    ];
-    let popup = centered(area, 70, 12);
-    frame.render_widget(Clear, popup);
-    frame.render_widget(
-        Paragraph::new(text)
-            .block(block)
-            .scroll((app.help_scroll, 0))
-            .wrap(Wrap { trim: false }),
-        popup,
-    );
+    ]
 }
 
 fn current_entry(app: &App) -> Option<&ScanEntry> {

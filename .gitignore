@@ -1,3 +1,12 @@
 /target
 **/*.rs.bk
 .DS_Store
+
+# local code-index caches
+.serena/
+.codegraph/
+graphify-out/
+
+# local agent workflow state
+.claude/.review-state.json
+.claude/.verify-state.json

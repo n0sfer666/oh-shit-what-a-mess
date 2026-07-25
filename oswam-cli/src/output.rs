@@ -25,7 +25,7 @@ pub fn print_scan(result: &ScanResult) {
                 "  {} {:<8} {:>10}  {}",
                 symbol(entry.risk),
                 format!("{:?}", entry.risk),
-                human_bytes(entry.physical_bytes),
+                entry.size_label(),
                 entry.display
             );
         }
@@ -48,18 +48,89 @@ pub fn print_tips(elevated: bool) {
     }
 }
 
-pub fn print_summary(manifest: &Manifest, dry_run: bool, trash: bool) {
+pub fn summary_lines(manifest: &Manifest, dry_run: bool, failures: usize) -> Vec<String> {
     let head = if dry_run {
         "Превью"
     } else {
         "Готово"
     };
-    println!(
-        "\n{head}: {} элементов, {} физически.",
+    let mut lines = vec![format!(
+        "{head}: {} элементов, {} физически.",
         manifest.entries.len(),
         human_bytes(manifest.total_bytes())
-    );
-    if !dry_run && trash {
-        println!("Перемещено в Корзину — место освободится после её очистки.");
+    )];
+    let freed = manifest.bytes_with_action("permanent") + manifest.bytes_with_action("native");
+    let trashed = manifest.bytes_with_action("trash");
+    if freed > 0 {
+        lines.push(if dry_run {
+            format!("Освободилось бы сразу: {}", human_bytes(freed))
+        } else {
+            format!("Освобождено сразу: {}", human_bytes(freed))
+        });
+    }
+    if trashed > 0 {
+        lines.push(if dry_run {
+            format!(
+                "Ушло бы в Корзину: {} — место освободится после её очистки.",
+                human_bytes(trashed)
+            )
+        } else {
+            format!(
+                "Перемещено в Корзину: {} — место освободится после её очистки.",
+                human_bytes(trashed)
+            )
+        });
+    }
+    if failures > 0 {
+        lines.push(if dry_run {
+            format!("Не удалось бы: {failures} элементов (нет доступа или занято).")
+        } else {
+            format!("Не удалось: {failures} элементов (нет доступа или занято).")
+        });
+    }
+    lines
+}
+
+pub fn print_summary(manifest: &Manifest, dry_run: bool, failures: usize) {
+    println!();
+    for line in summary_lines(manifest, dry_run, failures) {
+        println!("{line}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::summary_lines;
+    use oswam_core::manifest::Manifest;
+    use std::path::Path;
+
+    fn manifest(action: &str) -> Manifest {
+        let mut m = Manifest::default();
+        m.record(
+            Path::new("/Users/tester/Library/Caches/x"),
+            2048,
+            action,
+            "2026-07-25T00:00:00Z",
+        );
+        m
+    }
+
+    #[test]
+    fn a_preview_never_claims_that_anything_already_moved() {
+        for action in ["trash", "permanent", "native"] {
+            for line in summary_lines(&manifest(action), true, 1) {
+                assert!(
+                    !line.contains("Перемещено") && !line.contains("Освобождено"),
+                    "{line}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_real_run_reports_in_the_past_tense() {
+        let lines = summary_lines(&manifest("trash"), false, 0).join("\n");
+        assert!(lines.contains("Готово"));
+        assert!(lines.contains("Перемещено в Корзину"));
     }
 }

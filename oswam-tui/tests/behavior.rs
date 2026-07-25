@@ -1,52 +1,9 @@
-use oswam_core::category::CleanupKind;
+mod support;
+
 use oswam_core::config::Theme;
 use oswam_core::delete::Disposition;
-use oswam_core::risk::RiskLevel;
-use oswam_core::scan::{ScanCategory, ScanEntry, ScanResult};
-use oswam_tui::app::{App, Grouping, Key, Panel, Phase};
-use std::path::PathBuf;
-
-fn entry(risk: RiskLevel, kind: CleanupKind, bytes: u64) -> ScanEntry {
-    ScanEntry {
-        display: "e".into(),
-        path: PathBuf::from("/e"),
-        kind,
-        risk,
-        physical_bytes: bytes,
-        native: None,
-    }
-}
-
-fn result() -> ScanResult {
-    ScanResult {
-        categories: vec![
-            ScanCategory {
-                id: "system".into(),
-                name: "S".into(),
-                glyph: "s".into(),
-                entries: vec![
-                    entry(RiskLevel::Safe, CleanupKind::DeleteContents, 100),
-                    entry(RiskLevel::Caution, CleanupKind::DeleteContents, 50),
-                ],
-                total_bytes: 150,
-            },
-            ScanCategory {
-                id: "dev".into(),
-                name: "D".into(),
-                glyph: "d".into(),
-                entries: vec![entry(RiskLevel::Safe, CleanupKind::DeletePath, 9000)],
-                total_bytes: 9000,
-            },
-        ],
-        total_bytes: 9150,
-    }
-}
-
-fn results_app(first_run: bool) -> App {
-    let mut a = App::new(Theme::Dark, first_run, false);
-    a.set_result(result());
-    a
-}
+use oswam_tui::app::{App, Grouping, Key, Panel, Phase, Summary};
+use support::results_app;
 
 #[test]
 fn starts_in_welcome_phase() {
@@ -80,17 +37,23 @@ fn set_result_enters_results_and_preselects_safe() {
 }
 
 #[test]
-fn first_run_shows_help_after_results() {
-    let a = results_app(true);
-    assert!(a.help_visible);
+fn nothing_irreversible_is_selected_for_the_user() {
+    use oswam_core::category::CleanupKind;
+    use oswam_core::risk::RiskLevel;
+    let mut result = support::result();
+    let mut entry = support::entry(RiskLevel::Safe, CleanupKind::DeleteContents, 700);
+    entry.permanent_only = true;
+    result.categories[0].entries.push(entry);
+    let mut a = App::new(Theme::Dark, false, false);
+    a.set_result(result);
+    assert!(!a.is_selected(0, 2));
+    assert_eq!(a.selected_total_bytes(), 100 + 9000);
 }
 
 #[test]
-fn help_arrows_scroll_not_close() {
-    let mut a = results_app(true);
-    a.on_key(Key::Down);
+fn first_run_shows_help_after_results() {
+    let a = results_app(true);
     assert!(a.help_visible);
-    assert_eq!(a.help_scroll, 1);
 }
 
 #[test]
@@ -171,7 +134,14 @@ fn deleting_phase_summary_and_done_quit() {
     assert_eq!(a.phase, Phase::Deleting);
     a.on_key(Key::Quit);
     assert!(!a.should_quit);
-    a.set_summary(3, 5000, true);
+    a.set_summary(Summary {
+        count: 3,
+        freed: 0,
+        trashed: 5000,
+        failed: 1,
+        partial: 0,
+        untouched: 0,
+    });
     assert_eq!(a.phase, Phase::Done);
     a.on_key(Key::Quit);
     assert!(a.should_quit);

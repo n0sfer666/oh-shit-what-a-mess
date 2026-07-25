@@ -1,10 +1,15 @@
 pub mod app;
+pub mod describe;
 pub mod detect;
 pub mod event;
+pub mod explain;
 pub mod input;
+pub mod modals;
 pub mod panels;
 pub mod query;
 pub mod render;
 pub mod run;
 pub mod screens;
+pub mod scroll;
+pub mod selection;
 pub mod theme;

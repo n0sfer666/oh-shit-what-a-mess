@@ -1,7 +1,7 @@
 use crate::app::{App, Grouping, Key, Panel, Phase};
+use crate::panels::{description_lines, help_lines};
 use oswam_core::config::Theme;
 use oswam_core::delete::Disposition;
-use oswam_core::select::is_deletable;
 
 impl App {
     pub fn on_key(&mut self, key: Key) {
@@ -60,7 +60,7 @@ impl App {
     }
 
     fn open_confirm(&mut self) {
-        if self.selected_total_bytes() > 0 {
+        if !self.selected.is_empty() {
             self.confirm_open = true;
             self.confirm_choice = 0;
         }
@@ -85,7 +85,12 @@ impl App {
     fn handle_help_key(&mut self, key: Key) {
         match key {
             Key::Up => self.help_scroll = self.help_scroll.saturating_sub(1),
-            Key::Down => self.help_scroll = self.help_scroll.saturating_add(1),
+            Key::Down => {
+                self.help_scroll = self
+                    .help_scroll
+                    .saturating_add(1)
+                    .min(self.help_view.max_scroll(&help_lines()))
+            }
             Key::Left | Key::Right => {}
             _ => {
                 self.help_visible = false;
@@ -109,6 +114,7 @@ impl App {
         };
         self.category_cursor = 0;
         self.file_cursor = 0;
+        self.desc_scroll = 0;
     }
 
     fn cycle_panel(&mut self) {
@@ -121,59 +127,36 @@ impl App {
 
     fn move_cursor(&mut self, delta: isize) {
         match self.panel {
-            Panel::Table => self.file_cursor = step(self.file_cursor, delta, self.entry_count()),
-            _ => {
+            Panel::Description => {
+                let shift =
+                    i16::try_from(delta).unwrap_or(if delta < 0 { i16::MIN } else { i16::MAX });
+                let limit = self.desc_view.max_scroll(&description_lines(self));
+                self.desc_scroll = self.desc_scroll.saturating_add_signed(shift).min(limit);
+            }
+            Panel::Table => {
+                self.file_cursor = step(self.file_cursor, delta, self.entry_count());
+                self.desc_scroll = 0;
+            }
+            Panel::Sidebar => {
                 self.category_cursor =
                     step(self.category_cursor, delta, self.result.categories.len());
                 self.file_cursor = 0;
+                self.desc_scroll = 0;
             }
         }
     }
 
     fn set_cursor(&mut self, pos: usize) {
         match self.panel {
-            Panel::Table => self.file_cursor = pos.min(self.entry_count().saturating_sub(1)),
-            _ => {
+            Panel::Description => self.desc_scroll = 0,
+            Panel::Table => {
+                self.file_cursor = pos.min(self.entry_count().saturating_sub(1));
+                self.desc_scroll = 0;
+            }
+            Panel::Sidebar => {
                 self.category_cursor = pos.min(self.result.categories.len().saturating_sub(1));
                 self.file_cursor = 0;
-            }
-        }
-    }
-
-    fn toggle_selection(&mut self) {
-        let Some(ci) = self.current_category() else {
-            return;
-        };
-        if self.panel == Panel::Table {
-            if let Some(entry) = self.result.categories[ci].entries.get(self.file_cursor) {
-                if is_deletable(entry) {
-                    let key = (ci, self.file_cursor);
-                    if !self.selected.remove(&key) {
-                        self.selected.insert(key);
-                    }
-                }
-            }
-        } else {
-            self.toggle_category(ci);
-        }
-    }
-
-    fn toggle_category(&mut self, ci: usize) {
-        let deletable: Vec<usize> = self.result.categories[ci]
-            .entries
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| is_deletable(e))
-            .map(|(ei, _)| ei)
-            .collect();
-        let all_selected = deletable
-            .iter()
-            .all(|ei| self.selected.contains(&(ci, *ei)));
-        for ei in deletable {
-            if all_selected {
-                self.selected.remove(&(ci, ei));
-            } else {
-                self.selected.insert((ci, ei));
+                self.desc_scroll = 0;
             }
         }
     }

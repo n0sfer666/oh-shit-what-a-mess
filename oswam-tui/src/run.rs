@@ -1,4 +1,4 @@
-use crate::app::App;
+use crate::app::{App, Summary};
 use crate::event::map_key;
 use crate::render::render;
 use crossterm::event::{self, Event, KeyEventKind};
@@ -30,11 +30,7 @@ pub enum DeleteMsg {
         total: usize,
         freed: u64,
     },
-    Done {
-        count: usize,
-        freed: u64,
-        trashed: bool,
-    },
+    Done(Summary),
 }
 
 pub type ScanJob = Box<dyn FnOnce(Sender<ScanMsg>) + Send>;
@@ -141,11 +137,7 @@ fn drain_delete(rx: &Receiver<DeleteMsg>, app: &mut App) {
                 total,
                 freed,
             } => app.update_delete(message, done, total, freed),
-            DeleteMsg::Done {
-                count,
-                freed,
-                trashed,
-            } => app.set_summary(count, freed, trashed),
+            DeleteMsg::Done(summary) => app.set_summary(summary),
         }
     }
 }

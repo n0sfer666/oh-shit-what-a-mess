@@ -20,7 +20,7 @@ mod tests {
 
     #[test]
     fn expands_home() {
-        let home = Path::new("/Users/n0sfer");
+        let home = Path::new("/Users/tester");
         assert_eq!(expand_tilde("~", home), home);
         assert_eq!(
             expand_tilde("~/Library/Caches", home),
@@ -30,14 +30,14 @@ mod tests {
 
     #[test]
     fn absolute_unchanged() {
-        let home = Path::new("/Users/n0sfer");
+        let home = Path::new("/Users/tester");
         assert_eq!(expand_tilde("/System", home), PathBuf::from("/System"));
     }
 
     #[test]
     fn ancestor_detection() {
-        let a = Path::new("/Users/n0sfer/Library/Caches");
-        let d = Path::new("/Users/n0sfer/Library/Caches/Yarn");
+        let a = Path::new("/Users/tester/Library/Caches");
+        let d = Path::new("/Users/tester/Library/Caches/Yarn");
         assert!(is_ancestor(a, d));
         assert!(!is_ancestor(d, a));
         assert!(!is_ancestor(a, a));

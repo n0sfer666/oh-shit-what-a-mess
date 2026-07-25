@@ -32,6 +32,22 @@ impl App {
             .sum()
     }
 
+    pub fn selected_unknown_size(&self) -> usize {
+        self.selected
+            .iter()
+            .filter_map(|(ci, ei)| self.result.categories.get(*ci)?.entries.get(*ei))
+            .filter(|e| e.size_unknown)
+            .count()
+    }
+
+    pub fn selected_permanent_only(&self) -> (usize, u64) {
+        self.selected
+            .iter()
+            .filter_map(|(ci, ei)| self.result.categories.get(*ci)?.entries.get(*ei))
+            .filter(|e| e.permanent_only)
+            .fold((0, 0), |(n, bytes), e| (n + 1, bytes + e.physical_bytes))
+    }
+
     pub fn is_selected(&self, ci: usize, ei: usize) -> bool {
         self.selected.contains(&(ci, ei))
     }

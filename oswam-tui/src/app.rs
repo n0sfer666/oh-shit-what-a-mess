@@ -1,3 +1,4 @@
+use crate::scroll::ScrollView;
 use oswam_core::config::Theme;
 use oswam_core::delete::Disposition;
 use oswam_core::risk::RiskLevel;
@@ -14,11 +15,14 @@ pub enum Phase {
     Done,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Summary {
     pub count: usize,
     pub freed: u64,
-    pub trashed: bool,
+    pub trashed: u64,
+    pub failed: usize,
+    pub partial: usize,
+    pub untouched: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,6 +77,9 @@ pub struct App {
     pub grouping: Grouping,
     pub help_visible: bool,
     pub help_scroll: u16,
+    pub desc_scroll: u16,
+    pub help_view: ScrollView,
+    pub desc_view: ScrollView,
     pub category_cursor: usize,
     pub file_cursor: usize,
     pub selected: HashSet<(usize, usize)>,
@@ -101,6 +108,9 @@ impl App {
             grouping: Grouping::Category,
             help_visible: false,
             help_scroll: 0,
+            desc_scroll: 0,
+            help_view: ScrollView::default(),
+            desc_view: ScrollView::default(),
             category_cursor: 0,
             file_cursor: 0,
             selected: HashSet::new(),
@@ -124,20 +134,16 @@ impl App {
         };
     }
 
-    pub fn set_summary(&mut self, count: usize, freed: u64, trashed: bool) {
+    pub fn set_summary(&mut self, summary: Summary) {
         self.phase = Phase::Done;
-        self.summary = Some(Summary {
-            count,
-            freed,
-            trashed,
-        });
+        self.summary = Some(summary);
     }
 
     pub fn set_result(&mut self, result: ScanResult) {
         self.selected.clear();
         for (ci, cat) in result.categories.iter().enumerate() {
             for (ei, entry) in cat.entries.iter().enumerate() {
-                if is_deletable(entry) && entry.risk == RiskLevel::Safe {
+                if is_deletable(entry) && entry.risk == RiskLevel::Safe && !entry.permanent_only {
                     self.selected.insert((ci, ei));
                 }
             }

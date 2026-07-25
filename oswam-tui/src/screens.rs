@@ -4,7 +4,7 @@ use crate::theme::{palette, risk_color};
 use oswam_core::format::human_bytes;
 use oswam_core::risk::RiskLevel;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, Clear, Gauge, Paragraph};
 use ratatui::Frame;
@@ -75,7 +75,7 @@ pub fn render_deleting(frame: &mut Frame, app: &App, area: Rect) {
         area,
         " Удаление… (не закрывайте) ",
         &app.delete,
-        "Освобождено",
+        "Убрано",
     );
 }
 
@@ -118,75 +118,5 @@ fn progress_box(
     frame.render_widget(
         Paragraph::new(format!("{bytes_label}: {}", human_bytes(state.bytes))),
         rows[2],
-    );
-}
-
-pub fn render_done(frame: &mut Frame, app: &App, area: Rect) {
-    let pal = palette(app.theme);
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Готово ")
-        .border_style(Style::default().fg(pal.accent));
-    let s = app.summary;
-    let (count, freed, trashed) = s
-        .map(|s| (s.count, s.freed, s.trashed))
-        .unwrap_or((0, 0, false));
-    let note = if trashed {
-        "Перемещено в Корзину — место освободится после её очистки."
-    } else {
-        "Удалено безвозвратно."
-    };
-    let text = vec![
-        Line::raw(""),
-        Line::styled(
-            format!("Обработано {count} элементов"),
-            Style::default().fg(pal.accent),
-        ),
-        Line::raw(format!("Освобождено ~{}", human_bytes(freed))),
-        Line::raw(""),
-        Line::raw(note),
-        Line::raw(""),
-        Line::raw("q — выход"),
-    ];
-    let popup = centered(area, 60, 11);
-    frame.render_widget(Clear, popup);
-    frame.render_widget(
-        Paragraph::new(text)
-            .block(block)
-            .alignment(Alignment::Center),
-        popup,
-    );
-}
-
-pub fn render_confirm(frame: &mut Frame, app: &App, popup: Rect) {
-    let pal = palette(app.theme);
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Удалить выбранное? ")
-        .border_style(Style::default().fg(pal.accent));
-    let opt = |idx: usize, label: &str| {
-        let mut style = Style::default();
-        if app.confirm_choice == idx {
-            style = style.add_modifier(Modifier::REVERSED);
-        }
-        Line::styled(format!("  {label}  "), style)
-    };
-    let text = vec![
-        Line::raw(format!(
-            "Освободится ~{}",
-            human_bytes(app.selected_total_bytes())
-        )),
-        Line::raw(""),
-        opt(0, "В Корзину (можно восстановить)"),
-        opt(1, "Безвозвратно удалить"),
-        Line::raw(""),
-        Line::raw("↑↓ выбор · Enter подтвердить · Esc отмена"),
-    ];
-    frame.render_widget(Clear, popup);
-    frame.render_widget(
-        Paragraph::new(text)
-            .block(block)
-            .alignment(Alignment::Center),
-        popup,
     );
 }

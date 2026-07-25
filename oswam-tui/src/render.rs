@@ -1,8 +1,7 @@
 use crate::app::{App, Panel, Phase};
-use crate::panels::{centered, focus_block, render_description, render_help, render_table};
-use crate::screens::{
-    render_confirm, render_deleting, render_done, render_scanning, render_welcome,
-};
+use crate::modals::{render_confirm, render_done};
+use crate::panels::{focus_block, render_description, render_help, render_table};
+use crate::screens::{render_deleting, render_scanning, render_welcome};
 use crate::theme::{palette, risk_color, risk_symbol};
 use oswam_core::format::human_bytes;
 use oswam_core::select::is_deletable;
@@ -26,7 +25,7 @@ fn render_results(frame: &mut Frame, app: &App) {
     let area = frame.area();
     let rows = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
     let cols = Layout::horizontal([Constraint::Length(38), Constraint::Min(0)]).split(rows[0]);
-    let right = Layout::vertical([Constraint::Length(8), Constraint::Min(0)]).split(cols[1]);
+    let right = Layout::vertical([Constraint::Length(12), Constraint::Min(0)]).split(cols[1]);
 
     render_sidebar(frame, app, cols[0]);
     render_description(frame, app, right[0]);
@@ -34,7 +33,7 @@ fn render_results(frame: &mut Frame, app: &App) {
     render_action_bar(frame, app, rows[1]);
 
     if app.confirm_open {
-        render_confirm(frame, app, centered(area, 56, 9));
+        render_confirm(frame, app, area);
     }
     if app.help_visible {
         render_help(frame, app, area);

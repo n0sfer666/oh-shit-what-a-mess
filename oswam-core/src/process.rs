@@ -52,28 +52,28 @@ mod tests {
 
     #[test]
     fn detects_open_file_under_target() {
-        let open = vec![PathBuf::from("/Users/n0sfer/Library/Caches/Arc/x.db")];
+        let open = vec![PathBuf::from("/Users/tester/Library/Caches/Arc/x.db")];
         assert!(path_held(
             &open,
-            Path::new("/Users/n0sfer/Library/Caches/Arc")
+            Path::new("/Users/tester/Library/Caches/Arc")
         ));
     }
 
     #[test]
     fn unrelated_open_files_not_held() {
-        let open = vec![PathBuf::from("/Users/n0sfer/Documents/note.txt")];
+        let open = vec![PathBuf::from("/Users/tester/Documents/note.txt")];
         assert!(!path_held(
             &open,
-            Path::new("/Users/n0sfer/Library/Caches/Arc")
+            Path::new("/Users/tester/Library/Caches/Arc")
         ));
     }
 
     #[test]
     fn parses_lsof_name_lines() {
-        let out = "p123\nn/Users/x/file\nfcwd\nn/tmp/y\nnpipe\n";
+        let out = "p123\nn/Users/tester/file\nfcwd\nn/tmp/y\nnpipe\n";
         assert_eq!(
             parse_lsof(out),
-            vec![PathBuf::from("/Users/x/file"), PathBuf::from("/tmp/y")]
+            vec![PathBuf::from("/Users/tester/file"), PathBuf::from("/tmp/y")]
         );
     }
 }
