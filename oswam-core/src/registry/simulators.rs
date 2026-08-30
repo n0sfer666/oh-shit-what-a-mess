@@ -1,8 +1,10 @@
-use super::native;
+use super::{native, native_filtered};
 use crate::category::{Category, CleanupKind::*, Target};
 use crate::risk::RiskLevel::*;
 
 const SIMCTL: [&[&str]; 2] = [&["xcode-select", "-p"], &["xcrun", "--find", "simctl"]];
+
+const RUNTIME_LIST: [&str; 4] = ["xcrun", "simctl", "runtime", "list"];
 
 pub fn category() -> Category {
     Category {
@@ -15,6 +17,11 @@ pub fn category() -> Category {
                 DeleteContents,
                 Safe,
             ),
+            Target::new(
+                "~/Library/Developer/CoreSimulator/Devices",
+                InfoOnly,
+                Danger,
+            ),
             Target::grouped("~/.android/avd", DeletePath, Danger),
             Target::enumerated("~/Library/Android/sdk/system-images", DeletePath, Caution),
             Target::enumerated("~/Library/Android/sdk/ndk", DeletePath, Caution),
@@ -26,9 +33,17 @@ pub fn category() -> Category {
                 Safe,
             ),
             native(
-                "Xcode: недоступные iOS runtimes",
+                "Xcode: все симуляторы (simctl delete all)",
                 &SIMCTL,
-                &["xcrun", "simctl", "runtime", "delete", "unavailable"],
+                &["xcrun", "simctl", "delete", "all"],
+                Danger,
+            ),
+            native_filtered(
+                "Xcode: все iOS runtimes (simctl runtime delete all)",
+                &SIMCTL,
+                &RUNTIME_LIST,
+                &["xcrun", "simctl", "runtime", "delete", "all"],
+                &["Total Disk Images"],
                 Caution,
             ),
             native(

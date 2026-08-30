@@ -20,6 +20,7 @@ pub fn category() -> Category {
             ),
             Target::enumerated(&format!("{base}/Steam/steamapps/common"), InfoOnly, Danger),
             Target::new(&format!("{base}/Claude"), InfoOnly, Danger),
+            Target::new(&format!("{base}/Claude/vm_bundles"), InfoOnly, Danger),
             Target::new(&format!("{base}/Google"), InfoOnly, Danger),
             Target::new(
                 "~/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram",

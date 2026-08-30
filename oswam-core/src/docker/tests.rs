@@ -142,3 +142,26 @@ fn a_probe_gates_the_estimate_it_travels_with() {
     spec.probe = vec![vec!["true".to_string()]];
     assert_eq!(estimate(&spec), Some(1_500_000_000));
 }
+
+#[test]
+fn a_labelled_total_reports_the_size_in_parentheses() {
+    let out = "== Disk Images ==\n-- iOS --\niOS 18.6 (22G86) - ABC (Ready)\n\nTotal Disk Images: 5 (39.4G)\n";
+    let only_images = vec!["Total Disk Images".to_string()];
+    assert_eq!(
+        parse_reclaimable_filtered(out, &only_images),
+        39_400_000_000
+    );
+}
+
+#[test]
+fn a_runtime_row_is_not_mistaken_for_a_total() {
+    let out = "iOS 26.4 (23E244) - ABC (Unusable - Other Failure: Duplicate of DEF)\n";
+    let only_images = vec!["Total Disk Images".to_string()];
+    assert_eq!(parse_reclaimable_filtered(out, &only_images), 0);
+}
+
+#[test]
+fn a_percentage_in_parentheses_never_passes_for_a_size() {
+    assert_eq!(parse_reclaimable("1.5GB (50%)\n"), 1_500_000_000);
+    assert_eq!(parse_reclaimable("0B (0%)\n"), 0);
+}

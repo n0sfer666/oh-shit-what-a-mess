@@ -62,7 +62,7 @@ fn ambiguous_source_directory_names_are_not_matched_exactly() {
         .discover
         .clone()
         .expect("discover");
-    for ambiguous in ["build", "dist", "out", "lib", "bin"] {
+    for ambiguous in ["dist", "out", "lib", "bin"] {
         assert!(
             !names.contains(&ambiguous),
             "{ambiguous} matches hand-written sources as often as artifacts"
@@ -122,4 +122,80 @@ fn elevated_targets_all_require_root() {
         "elevated",
         "/Library/Developer/CoreSimulator/Caches/dyld"
     ));
+}
+
+#[test]
+fn every_ambiguous_artifact_name_declares_how_it_proves_itself() {
+    let names = cat("projects").targets[0]
+        .discover
+        .clone()
+        .expect("discover");
+    assert!(names.contains(&"build"));
+    for name in names.iter().filter(|n| !n.contains('*')) {
+        assert!(
+            crate::discover::stands_alone(name) || crate::discover::needs_proof(name),
+            "{name}: an artifact name matched exactly must be listed as unambiguous or as \
+             needing a marker, otherwise it silently starts matching sources"
+        );
+    }
+}
+
+#[test]
+fn simulator_devices_are_shown_but_never_removed_by_hand() {
+    let devices = target("simulators", "~/Library/Developer/CoreSimulator/Devices");
+    assert_eq!(devices.kind, CleanupKind::InfoOnly);
+    assert_eq!(
+        clean_of("simulators", &["xcrun", "simctl", "delete", "all"]),
+        vec!["xcrun", "simctl", "delete", "all"]
+    );
+}
+
+#[test]
+fn newly_registered_space_hogs_keep_their_risk() {
+    for (id, path, kind, risk) in [
+        (
+            "big-data",
+            "~/Library/Application Support/Claude/vm_bundles",
+            CleanupKind::InfoOnly,
+            RiskLevel::Danger,
+        ),
+        (
+            "dev",
+            "~/.local/share/uv/tools",
+            CleanupKind::NativeCommand,
+            RiskLevel::Caution,
+        ),
+        (
+            "dev",
+            "~/.vscode/extensions",
+            CleanupKind::DeleteContents,
+            RiskLevel::Danger,
+        ),
+        (
+            "simulators",
+            "~/Library/Developer/CoreSimulator/Devices",
+            CleanupKind::InfoOnly,
+            RiskLevel::Danger,
+        ),
+        (
+            "elevated",
+            "/Library/Developer/CommandLineTools",
+            CleanupKind::DeletePath,
+            RiskLevel::Caution,
+        ),
+    ] {
+        let t = target(id, path);
+        assert_eq!(t.kind, kind, "{path}");
+        assert_eq!(t.risk, risk, "{path}");
+    }
+}
+
+#[test]
+fn a_live_vm_disk_is_shown_but_never_deleted_by_hand() {
+    let bundles = target(
+        "big-data",
+        "~/Library/Application Support/Claude/vm_bundles",
+    );
+    assert_eq!(bundles.kind, CleanupKind::InfoOnly);
+    assert_eq!(bundles.risk, RiskLevel::Danger);
 }

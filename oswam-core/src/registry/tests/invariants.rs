@@ -3,6 +3,8 @@ use crate::category::CleanupKind;
 
 const VM_IMAGE_SUFFIXES: [&str; 6] = [".raw", ".qcow2", ".vdi", ".vmdk", ".img", ".sparsebundle"];
 
+const VM_BUNDLE_DIRS: [&str; 3] = ["vm_bundles", ".bundle", "virtual machines.localized"];
+
 fn words(spec: &crate::category::NativeSpec) -> Vec<&String> {
     spec.clean
         .iter()
@@ -61,6 +63,18 @@ fn no_target_points_at_a_vm_image() {
         assert!(
             !VM_IMAGE_SUFFIXES.iter().any(|s| lower.ends_with(s)) || !deletes(&t),
             "{}",
+            t.path
+        );
+    }
+}
+
+#[test]
+fn no_target_deletes_the_folder_a_vm_image_lives_in() {
+    for t in all_targets() {
+        let lower = t.path.to_ascii_lowercase();
+        assert!(
+            !VM_BUNDLE_DIRS.iter().any(|s| lower.ends_with(s)) || !deletes(&t),
+            "{}: deleting this folder would rm a live VM disk — show it, do not clean it",
             t.path
         );
     }

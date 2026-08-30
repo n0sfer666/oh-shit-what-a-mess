@@ -30,9 +30,9 @@ pub fn parse_reclaimable(output: &str) -> u64 {
 pub fn parse_reclaimable_filtered(output: &str, types: &[String]) -> u64 {
     output
         .lines()
-        .filter_map(split_row)
+        .filter_map(|line| split_row(line, !types.is_empty()))
         .filter(|(ty, _)| types.is_empty() || types.iter().any(|t| t == ty))
-        .filter_map(|(_, size)| parse_human_size(size.split_whitespace().next()?))
+        .filter_map(|(_, size)| row_size(size))
         .sum()
 }
 
@@ -43,14 +43,27 @@ pub fn parse_reclaimed(output: &str) -> Option<u64> {
         .and_then(|(_, size)| parse_human_size(size.trim()))
 }
 
-fn split_row(line: &str) -> Option<(&str, &str)> {
+fn split_row(line: &str, labelled: bool) -> Option<(&str, &str)> {
     if line.trim().is_empty() {
         return None;
     }
-    Some(match line.split_once('\t') {
-        Some((ty, size)) => (ty.trim(), size),
-        None => ("", line),
-    })
+    if let Some((ty, size)) = line.split_once('\t') {
+        return Some((ty.trim(), size));
+    }
+    match line.split_once(':') {
+        Some((ty, size)) if labelled => Some((ty.trim(), size)),
+        Some(_) => None,
+        None => Some(("", line)),
+    }
+}
+
+fn row_size(cell: &str) -> Option<u64> {
+    trailing_parenthesised(cell).or_else(|| parse_human_size(cell.split_whitespace().next()?))
+}
+
+fn trailing_parenthesised(cell: &str) -> Option<u64> {
+    let (_, tail) = cell.trim_end().rsplit_once('(')?;
+    parse_human_size(tail.strip_suffix(')')?)
 }
 
 pub fn estimate(spec: &NativeSpec) -> Option<u64> {

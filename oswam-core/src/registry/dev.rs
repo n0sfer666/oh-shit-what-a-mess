@@ -36,6 +36,19 @@ pub fn category() -> Category {
             Target::enumerated("~/.rustup/toolchains", DeletePath, Caution),
             Target::enumerated("/usr/local/n/versions/node", DeletePath, Caution),
             native(
+                "go module cache (go clean -modcache)",
+                &[&["go", "version"]],
+                &["go", "clean", "-modcache"],
+                Caution,
+            ),
+            native_at(
+                "~/.local/share/uv/tools",
+                &[&["uv", "--version"]],
+                &["uv", "tool", "uninstall", "--all"],
+                Caution,
+            ),
+            Target::new("~/.vscode/extensions", DeleteContents, Danger),
+            native(
                 "pnpm store (pnpm store prune)",
                 &[&["pnpm", "store", "path"]],
                 &["pnpm", "store", "prune"],

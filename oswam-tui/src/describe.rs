@@ -22,12 +22,25 @@ pub fn what_is_it(category_id: &str, entry: &ScanEntry) -> &'static str {
     }
     if entry.kind == CleanupKind::InfoOnly {
         if category_id == "simulators" {
-            return "Комплект файлов, часть которого защищена: удалить можно только целиком, поэтому показано для справки.";
+            return if entry.path.ends_with("CoreSimulator/Devices") {
+                "Устройства симулятора: вес лежит здесь, но удаляет их только simctl — команды в этой же категории."
+            } else {
+                "Комплект файлов, часть которого защищена: удалить можно только целиком, поэтому показано для справки."
+            };
         }
         if category_id == "system-caches" {
             return "Системный кэш под защитой (SIP или ваш protected_paths) — показан для справки, удалять его OSWaM не станет.";
         }
         return "Данные приложения — показаны для справки, чистить только вручную в самом приложении.";
+    }
+    if entry.display.contains("runtime delete all") {
+        return "Все iOS-рантаймы: показан их полный вес, но занятый запущенным симулятором рантайм остаётся — освободится не больше показанного.";
+    }
+    if entry.path.ends_with(".vscode/extensions") {
+        return "Расширения VS Code вместе с их списком (extensions.json): что было установлено, восстанавливать придётся вручную.";
+    }
+    if entry.path.ends_with("Developer/CommandLineTools") {
+        return "Command Line Tools целиком: без Xcode.app это выключает git, clang и make до `xcode-select --install` (~1.5 GB заново).";
     }
     if entry.risk == RiskLevel::Danger {
         return danger_text(category_id);
@@ -141,5 +154,42 @@ mod tests {
     fn system_log_erase_warns_about_irreversibility() {
         let e = entry(CleanupKind::NativeCommand, RiskLevel::Caution, 0);
         assert!(what_is_it("elevated", &e).contains("необратима"));
+    }
+
+    #[test]
+    fn simulator_devices_are_not_called_a_protected_bundle() {
+        let mut e = entry(CleanupKind::InfoOnly, RiskLevel::Caution, 1);
+        e.path = PathBuf::from("/Users/tester/Library/Developer/CoreSimulator/Devices");
+        let text = what_is_it("simulators", &e);
+        assert!(text.contains("simctl"), "{text}");
+        assert!(!text.contains("защищена"), "{text}");
+        let other = entry(CleanupKind::InfoOnly, RiskLevel::Caution, 1);
+        assert_ne!(what_is_it("simulators", &other), text);
+    }
+
+    #[test]
+    fn a_toolchain_is_not_described_as_a_cache() {
+        let mut e = entry(CleanupKind::DeletePath, RiskLevel::Caution, 1);
+        e.path = PathBuf::from("/Library/Developer/CommandLineTools");
+        let text = what_is_it("elevated", &e);
+        assert!(text.contains("xcode-select"), "{text}");
+        assert!(!text.contains("кэш"), "{text}");
+    }
+
+    #[test]
+    fn losing_the_extension_list_is_spelled_out() {
+        let mut e = entry(CleanupKind::DeleteContents, RiskLevel::Danger, 1);
+        e.path = PathBuf::from("/Users/tester/.vscode/extensions");
+        let text = what_is_it("dev", &e);
+        assert!(text.contains("вручную"), "{text}");
+        assert!(!text.contains("перекачает"), "{text}");
+    }
+
+    #[test]
+    fn a_wholesale_runtime_delete_promises_no_more_than_it_frees() {
+        let mut e = entry(CleanupKind::NativeCommand, RiskLevel::Caution, 39);
+        e.display = "Xcode: все iOS runtimes (simctl runtime delete all)".into();
+        let text = what_is_it("simulators", &e);
+        assert!(text.contains("не больше показанного"), "{text}");
     }
 }
