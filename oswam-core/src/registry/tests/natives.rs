@@ -58,13 +58,13 @@ fn volume_prune_is_the_only_dangerous_docker_step() {
 }
 
 #[test]
-fn simulator_runtimes_are_pruned_by_age_and_availability() {
+fn simulator_runtimes_are_pruned_wholesale_or_by_age() {
     assert_eq!(
         clean_of(
             "simulators",
-            &["xcrun", "simctl", "runtime", "delete", "unavailable"]
+            &["xcrun", "simctl", "runtime", "delete", "all"]
         ),
-        vec!["xcrun", "simctl", "runtime", "delete", "unavailable"]
+        vec!["xcrun", "simctl", "runtime", "delete", "all"]
     );
     assert_eq!(
         clean_of(
@@ -80,4 +80,79 @@ fn simulator_runtimes_are_pruned_by_age_and_availability() {
             "180"
         ]
     );
+}
+
+#[test]
+fn simctl_runtime_delete_never_claims_the_device_only_unavailable_alias() {
+    for spec in cat("simulators")
+        .targets
+        .iter()
+        .filter_map(|t| t.native.as_ref())
+        .filter(|s| s.clean.get(2).is_some_and(|w| w == "runtime"))
+    {
+        assert!(
+            !spec.clean.iter().any(|w| w == "unavailable"),
+            "{:?}: simctl runtime delete rejects 'unavailable' — it exists only for devices",
+            spec.clean
+        );
+    }
+}
+
+#[test]
+fn only_the_wholesale_runtime_delete_promises_a_size() {
+    let sized: Vec<Vec<String>> = cat("simulators")
+        .targets
+        .iter()
+        .filter_map(|t| t.native.as_ref())
+        .filter(|s| !s.estimate.is_empty())
+        .map(|s| s.clean.clone())
+        .collect();
+    assert_eq!(
+        sized,
+        vec![vec![
+            "xcrun".to_string(),
+            "simctl".to_string(),
+            "runtime".to_string(),
+            "delete".to_string(),
+            "all".to_string(),
+        ]],
+        "a size shown next to a partial prune would promise more than it deletes"
+    );
+}
+
+#[test]
+fn the_runtime_size_is_read_from_the_disk_image_total() {
+    let spec = cat("simulators")
+        .targets
+        .iter()
+        .filter_map(|t| t.native.as_ref())
+        .find(|s| !s.estimate.is_empty())
+        .expect("a sized simulator native")
+        .clone();
+    assert_eq!(spec.estimate, vec!["xcrun", "simctl", "runtime", "list"]);
+    assert_eq!(spec.estimate_filter, vec!["Total Disk Images"]);
+}
+
+#[test]
+fn go_module_cache_is_cleaned_by_go_itself() {
+    assert_eq!(
+        clean_of("dev", &["go", "clean", "-modcache"]),
+        vec!["go", "clean", "-modcache"]
+    );
+    assert!(
+        !all_targets()
+            .iter()
+            .any(|t| t.measured && t.path.contains("go/pkg/mod")),
+        "GOMODCACHE moves with the environment: never size a hardcoded default and let go clean \
+         wipe somewhere else"
+    );
+}
+
+#[test]
+fn uv_tools_are_uninstalled_by_uv_so_the_shims_go_too() {
+    assert_eq!(
+        clean_of("dev", &["uv", "tool", "uninstall"]),
+        vec!["uv", "tool", "uninstall", "--all"]
+    );
+    assert!(target("dev", "~/.local/share/uv/tools").measured);
 }

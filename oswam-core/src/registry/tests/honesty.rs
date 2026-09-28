@@ -2,7 +2,7 @@ use super::*;
 use crate::category::CleanupKind;
 use crate::risk::RiskLevel;
 
-const AUDITED_MEASURED: [&str; 1] = ["~/.npm/_cacache"];
+const AUDITED_MEASURED: [&str; 2] = ["~/.npm/_cacache", "~/.local/share/uv/tools"];
 
 const REFETCHED: [&str; 9] = [
     "~/.cache",

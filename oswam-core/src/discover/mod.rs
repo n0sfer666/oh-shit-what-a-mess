@@ -23,6 +23,29 @@ const BUILD_MARKERS: [&str; 6] = [
 
 const AMBIGUOUS_NAMES: [&str; 1] = ["target"];
 
+const MARKER_ONLY_NAMES: [&str; 1] = ["build"];
+
+#[cfg(test)]
+const STANDALONE_NAMES: [&str; 7] = [
+    "node_modules",
+    ".next",
+    "DerivedData",
+    ".turbo",
+    ".parcel-cache",
+    ".dart_tool",
+    "__pycache__",
+];
+
+#[cfg(test)]
+pub(crate) fn stands_alone(name: &str) -> bool {
+    STANDALONE_NAMES.contains(&name)
+}
+
+#[cfg(test)]
+pub(crate) fn needs_proof(name: &str) -> bool {
+    AMBIGUOUS_NAMES.contains(&name) || MARKER_ONLY_NAMES.contains(&name)
+}
+
 const PROJECT_MANIFESTS: [&str; 5] = [
     "Cargo.toml",
     "pom.xml",
@@ -81,6 +104,7 @@ fn walk<F: FsOps>(fs: &F, dir: &Path, names: &[&str], depth: usize, out: &mut Ve
             .and_then(|n| n.to_str())
             .unwrap_or_default();
         let accepted = match name_matches(name, names) {
+            Match::Exact if MARKER_ONLY_NAMES.contains(&name) => looks_generated(fs, &child),
             Match::Exact if AMBIGUOUS_NAMES.contains(&name) => {
                 looks_generated(fs, &child) || has_child(fs, dir, &PROJECT_MANIFESTS)
             }

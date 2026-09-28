@@ -15,6 +15,7 @@ pub fn category() -> Category {
             )
             .needing_root(),
             Target::enumerated("/Library/Logs", DeleteContents, Caution).needing_root(),
+            Target::new("/Library/Developer/CommandLineTools", DeletePath, Caution).needing_root(),
             Target::new(
                 "/Library/Application Support/CrashReporter",
                 DeleteContents,

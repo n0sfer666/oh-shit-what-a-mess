@@ -11,8 +11,9 @@ const ROOTS: [&str; 7] = [
     "~/work",
 ];
 
-const ARTIFACT_DIRS: [&str; 10] = [
+const ARTIFACT_DIRS: [&str; 11] = [
     "target",
+    "build",
     "node_modules",
     ".next",
     "build-*",
