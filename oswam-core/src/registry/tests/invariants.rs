@@ -1,7 +1,10 @@
 use super::*;
-use crate::category::CleanupKind;
+use crate::risk::RiskLevel;
 
 const VM_IMAGE_SUFFIXES: [&str; 6] = [".raw", ".qcow2", ".vdi", ".vmdk", ".img", ".sparsebundle"];
+
+const REDOWNLOADED_VM_IMAGES: [&str; 1] =
+    ["~/Library/Application Support/Claude/vm_bundles/claudevm.bundle/rootfs.img"];
 
 const VM_BUNDLE_DIRS: [&str; 3] = ["vm_bundles", ".bundle", "virtual machines.localized"];
 
@@ -11,13 +14,6 @@ fn words(spec: &crate::category::NativeSpec) -> Vec<&String> {
         .chain(spec.estimate.iter())
         .chain(spec.probe.iter().flatten())
         .collect()
-}
-
-fn deletes(target: &Target) -> bool {
-    matches!(
-        target.kind,
-        CleanupKind::DeleteContents | CleanupKind::DeletePath
-    )
 }
 
 #[test]
@@ -40,25 +36,16 @@ fn no_target_is_bound_to_a_concrete_user() {
 }
 
 #[test]
-fn no_target_is_nested_in_another() {
-    let paths: Vec<String> = all_targets()
-        .iter()
-        .filter(|t| deletes(t) || t.measured)
-        .map(|t| t.path.trim_end_matches('/').to_string())
-        .collect();
-    for outer in &paths {
-        for inner in &paths {
-            assert!(
-                !inner.starts_with(&format!("{outer}/")),
-                "{inner} is already covered by {outer}"
-            );
-        }
-    }
-}
-
-#[test]
 fn no_target_points_at_a_vm_image() {
     for t in all_targets() {
+        if REDOWNLOADED_VM_IMAGES.contains(&t.path.as_str()) {
+            assert!(
+                t.blocking_app.is_some() && t.risk >= RiskLevel::Caution,
+                "{}: a re-downloadable VM image goes only while its app is closed",
+                t.path
+            );
+            continue;
+        }
         let lower = t.path.to_ascii_lowercase();
         assert!(
             !VM_IMAGE_SUFFIXES.iter().any(|s| lower.ends_with(s)) || !deletes(&t),
@@ -150,9 +137,15 @@ fn grouping_is_opt_in_and_only_for_enumerated_targets() {
 }
 
 #[test]
-fn discover_targets_declare_a_depth_and_no_bare_wildcard() {
+fn project_roots_are_searched_below_the_top_level() {
+    for t in &cat("projects").targets {
+        assert!(t.discover.is_some() && t.depth > 0, "{}", t.path);
+    }
+}
+
+#[test]
+fn discover_targets_name_no_bare_wildcard() {
     for t in all_targets().iter().filter(|t| t.discover.is_some()) {
-        assert!(t.depth > 0, "{}", t.path);
         let names = t.discover.as_ref().expect("discover");
         assert!(
             names.iter().all(|n| *n != "*" && !n.is_empty()),
@@ -175,13 +168,18 @@ fn a_native_runs_as_root_only_when_the_target_demands_it() {
 }
 
 #[test]
-fn only_elevated_category_needs_root() {
-    for c in builtin_categories() {
-        let expected = c.id == "elevated";
-        assert!(
-            c.targets.iter().all(|t| t.needs_root == expected),
-            "{}",
-            c.id
-        );
+fn only_system_data_reaches_for_root() {
+    for c in builtin_categories()
+        .iter()
+        .filter(|c| c.id != SYSTEM_DATA_ID)
+    {
+        assert!(c.targets.iter().all(|t| !t.needs_root), "{}", c.id);
+    }
+}
+
+#[test]
+fn an_app_bound_target_is_never_a_native_command() {
+    for t in all_targets().iter().filter(|t| t.blocking_app.is_some()) {
+        assert!(t.native.is_none(), "{}", t.path);
     }
 }

@@ -1,4 +1,5 @@
 mod basics;
+mod blocked;
 mod discovered;
 mod grouped;
 mod native;
@@ -31,6 +32,13 @@ impl Env {
     pub(super) fn holding(fs: FakeFs, held: &str) -> Self {
         Self {
             probe: LsofProbe::from_paths(vec![PathBuf::from(held)]),
+            ..Self::new(fs)
+        }
+    }
+
+    pub(super) fn running(fs: FakeFs, apps: &[&str]) -> Self {
+        Self {
+            probe: LsofProbe::from_paths(vec![]).with_running(apps),
             ..Self::new(fs)
         }
     }

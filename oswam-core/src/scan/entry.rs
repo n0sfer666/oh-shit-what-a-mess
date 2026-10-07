@@ -37,7 +37,14 @@ where
         classified
     };
     let guard = ctx.guard_for(target);
-    let allowed = |p: &Path, meta: &crate::fsops::Meta| guard.allows_meta(p, meta);
+    let info_only = target.kind == CleanupKind::InfoOnly;
+    let allowed = |p: &Path, meta: &crate::fsops::Meta| {
+        if info_only {
+            guard.admits(p)
+        } else {
+            guard.allows_meta(p, meta)
+        }
+    };
     let m = match target.kind {
         CleanupKind::DeleteContents => measure_contents(ctx.fs, path, &allowed),
         _ => measure_where(ctx.fs, path, &allowed),
@@ -56,6 +63,12 @@ where
         partial: m.partial,
         needs_root: target.needs_root,
         permanent_only: !ctx.fs.can_trash(path),
+        blocking_app: target.blocking_app.map(str::to_string),
+        blocked: risk != RiskLevel::Never
+            && target.kind != CleanupKind::InfoOnly
+            && target
+                .blocking_app
+                .is_some_and(|app| ctx.probe.running(app)),
     })
 }
 

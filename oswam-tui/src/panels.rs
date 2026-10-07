@@ -1,6 +1,7 @@
 use crate::app::{App, Panel};
 use crate::describe::{empty_note, what_is_it, why_text};
 use crate::explain::{action_text, select_hint, size_line};
+use crate::overview::category_lines;
 use crate::theme::{palette, risk_color, risk_symbol};
 use oswam_core::scan::ScanEntry;
 use oswam_core::select::is_deletable;
@@ -22,7 +23,11 @@ pub fn focus_block(title: &str, focused: bool, app: &App) -> Block<'static> {
 
 pub fn render_description(frame: &mut Frame, app: &App, area: Rect) {
     let focused = app.panel == Panel::Description;
-    let block = focus_block("Описание", focused, app);
+    let title = match (app.panel, app.current_category()) {
+        (Panel::Sidebar, Some(ci)) => app.result.categories[ci].name.as_str(),
+        _ => "Описание",
+    };
+    let block = focus_block(title, focused, app);
     app.desc_view.observe(block.inner(area));
     let lines = description_lines(app);
     let offset = app.desc_scroll.min(app.desc_view.max_scroll(&lines));
@@ -36,6 +41,9 @@ pub fn render_description(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 pub fn description_lines(app: &App) -> Vec<Line<'static>> {
+    if let (Panel::Sidebar, Some(ci)) = (app.panel, app.current_category()) {
+        return category_lines(app, ci);
+    }
     let category_id = app
         .current_category()
         .map(|ci| app.result.categories[ci].id.as_str())
@@ -61,20 +69,22 @@ pub fn description_lines(app: &App) -> Vec<Line<'static>> {
                 Style::default().fg(palette(app.theme).muted),
             ),
         ],
-        None => vec![Line::raw(empty_note(category_id, app.elevated))],
+        None => vec![Line::raw(empty_note(category_id))],
     }
 }
 
 pub fn render_table(frame: &mut Frame, app: &App, area: Rect) {
     let focused = app.panel == Panel::Table;
-    let block = focus_block("Файлы", focused, app);
+    let block = focus_block("Файлы · крупные сверху", focused, app);
     let rows: Vec<Row> = match app.current_category() {
         Some(ci) => app.result.categories[ci]
             .entries
             .iter()
             .enumerate()
             .map(|(ei, e)| {
-                let mark = if !is_deletable(e) {
+                let mark = if e.blocked {
+                    " ⏸ "
+                } else if !is_deletable(e) {
                     " ⓘ "
                 } else if app.is_selected(ci, ei) {
                     "[x]"
@@ -111,7 +121,7 @@ pub fn render_help(frame: &mut Frame, app: &App, area: Rect) {
         .borders(Borders::ALL)
         .title(" Справка (любая клавиша — закрыть, ↑↓hjkl — скролл) ")
         .border_style(Style::default().fg(pal.accent));
-    let popup = centered(area, 70, 12);
+    let popup = centered(area, 70, 15);
     app.help_view.observe(block.inner(popup));
     let lines = help_lines();
     let offset = app.help_scroll.min(app.help_view.max_scroll(&lines));
@@ -128,14 +138,18 @@ pub fn render_help(frame: &mut Frame, app: &App, area: Rect) {
 pub fn help_lines() -> Vec<Line<'static>> {
     vec![
         Line::raw("Навигация:  j/k ↑/↓  ·  h/l панели  ·  Tab  ·  g/G"),
-        Line::raw("Space      выбрать категорию/файл"),
+        Line::raw("Space      выбрать файл · на категории — все ✓ и ▲"),
+        Line::raw("Enter      категория → файлы · на файле — выбрать"),
+        Line::raw("a / n      рекомендованное (все ✓) / снять всё"),
         Line::raw("j/k в «Описании» — прокрутка текста"),
         Line::raw("o          группировка (категория/размер/риск)"),
         Line::raw("t          тема (тёмная/светлая)"),
         Line::raw("Ctrl+P     удалить выбранное (Корзина/безвозвратно)"),
+        Line::raw("e          на итоге — дочистить положенное в Корзину"),
         Line::raw("?          справка   ·   q  выход"),
         Line::raw(""),
         Line::raw("Цвет + символ риска: ✓ Safe · ▲ Caution · ✗ Danger · ⛔ Never"),
+        Line::raw("✗ и «только безвозвратно» отмечаются только по одному."),
     ]
 }
 

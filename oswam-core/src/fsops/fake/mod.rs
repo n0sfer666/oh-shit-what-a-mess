@@ -41,6 +41,13 @@ impl FakeFs {
         self
     }
 
+    pub fn inode(&mut self, path: &str, ino: u64) -> &mut Self {
+        if let Some(meta) = self.entries.get_mut(Path::new(path)) {
+            meta.ino = ino;
+        }
+        self
+    }
+
     pub(super) fn homes(&self) -> Vec<&PathBuf> {
         self.home.iter().chain(self.home_alias.iter()).collect()
     }

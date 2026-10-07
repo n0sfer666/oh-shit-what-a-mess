@@ -51,6 +51,24 @@ pub fn render_done(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(risk_color(RiskLevel::Caution)),
         ));
     }
+    if s.kept_in_trash > 0 {
+        text.push(Line::styled(
+            format!(
+                "Остались в Корзине: {} — возвращены из неё или заменены",
+                s.kept_in_trash
+            ),
+            Style::default().fg(risk_color(RiskLevel::Caution)),
+        ));
+    }
+    if s.blocked > 0 {
+        text.push(Line::styled(
+            format!(
+                "Пропущено: {} — приложение снова запущено, закройте его и запустите oswam заново",
+                s.blocked
+            ),
+            Style::default().fg(risk_color(RiskLevel::Caution)),
+        ));
+    }
     if s.failed > 0 {
         text.push(Line::styled(
             format!("Не удалось: {} (нет доступа или занято)", s.failed),
@@ -58,8 +76,21 @@ pub fn render_done(frame: &mut Frame, app: &App, area: Rect) {
         ));
     }
     text.push(Line::raw(""));
+    if !app.trashed.is_empty() {
+        text.push(Line::styled(
+            format!(
+                "e — удалить навсегда то, что OSWaM положил в Корзину (~{})",
+                human_bytes(app.trashed.iter().map(|t| t.bytes).sum())
+            ),
+            Style::default().fg(pal.accent),
+        ));
+        text.push(Line::styled(
+            "Остальное содержимое Корзины не трогается.",
+            Style::default().fg(pal.muted),
+        ));
+    }
     text.push(Line::raw("q — выход"));
-    let popup = centered(area, 64, 12);
+    let popup = centered(area, 72, 16);
     frame.render_widget(Clear, popup);
     frame.render_widget(
         Paragraph::new(text)
@@ -128,7 +159,7 @@ fn confirm_lines(app: &App, muted: Color) -> Vec<Line<'static>> {
         ));
     }
     text.push(Line::styled(
-        "Корзина освободит место только после её очистки.",
+        "Корзина освободит место после очистки — её можно сделать на итоговом экране (e).",
         Style::default().fg(muted),
     ));
     text.push(Line::styled(

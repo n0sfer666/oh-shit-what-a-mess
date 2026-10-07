@@ -1,6 +1,7 @@
 use oswam_core::format::human_bytes;
 use oswam_core::manifest::Manifest;
-use oswam_core::scan::ScanResult;
+use oswam_core::scan::{ScanEntry, ScanResult};
+use oswam_tui::explain::blocked_text;
 
 fn symbol(risk: oswam_core::risk::RiskLevel) -> &'static str {
     use oswam_core::risk::RiskLevel::*;
@@ -22,15 +23,46 @@ pub fn print_scan(result: &ScanResult) {
         );
         for entry in &cat.entries {
             println!(
-                "  {} {:<8} {:>10}  {}",
+                "  {} {:<8} {:>10}  {}{}",
                 symbol(entry.risk),
                 format!("{:?}", entry.risk),
                 entry.size_label(),
-                entry.display
+                entry.display,
+                blocked_suffix(entry)
             );
         }
     }
     println!("\nИтого: {}", human_bytes(result.total_bytes));
+    let held: Vec<&ScanEntry> = result
+        .categories
+        .iter()
+        .flat_map(|c| &c.entries)
+        .filter(|e| e.blocked)
+        .collect();
+    print_blocked(&held);
+}
+
+fn blocked_suffix(entry: &ScanEntry) -> String {
+    match entry.blocking_app.as_deref().filter(|_| entry.blocked) {
+        Some(app) => format!("  ⏸ закройте {app}"),
+        None => String::new(),
+    }
+}
+
+pub fn print_blocked(entries: &[&ScanEntry]) {
+    let mut apps: Vec<&str> = entries
+        .iter()
+        .filter_map(|e| e.blocking_app.as_deref())
+        .collect();
+    apps.sort_unstable();
+    apps.dedup();
+    for app in apps {
+        let count = entries
+            .iter()
+            .filter(|e| e.blocking_app.as_deref() == Some(app))
+            .count();
+        println!("{} (целей: {count})", blocked_text(app));
+    }
 }
 
 pub fn print_tips(elevated: bool) {

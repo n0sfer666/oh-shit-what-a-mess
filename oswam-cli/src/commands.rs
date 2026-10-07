@@ -1,21 +1,20 @@
 use anyhow::Result;
-use oswam_core::category::{builtin_categories, CleanupKind};
-use oswam_core::delete::{Deleter, Disposition};
+use oswam_core::category::builtin_categories;
 use oswam_core::docker;
 use oswam_core::fsops::RealFs;
-use oswam_core::native;
 use oswam_core::privilege::is_root;
 use oswam_core::process::LsofProbe;
 use oswam_core::scan::{scan_with_progress, ScanCtx, ScanEntry, ScanResult};
-use oswam_core::select::{selectable, Selection};
-use oswam_tui::app::{App, Summary};
+use oswam_core::select::{blocked, selectable, Selection};
+use oswam_tui::app::App;
 use oswam_tui::detect::detect_from_env;
-use oswam_tui::run::{run, DeleteMsg, DeleteRunner, ScanJob, ScanMsg};
+use oswam_tui::run::{run, Jobs, ScanJob, ScanMsg};
 
 use crate::cli::disposition;
-use crate::context::{run_scan, snapshot_category, system_caches_category, Env};
-use crate::output::{print_scan, print_summary};
+use crate::context::{run_scan, Env};
+use crate::output::{print_blocked, print_scan, print_summary};
 use crate::perform::{execute, Runner};
+use crate::runners::{build_delete_runner, build_purge_runner};
 
 pub fn cmd_scan(env: &Env, json: bool) -> Result<()> {
     let result = run_scan(env)?;
@@ -47,6 +46,7 @@ pub fn cmd_clean(
         .into_iter()
         .cloned()
         .collect();
+    print_blocked(&blocked(&result, &selection));
     if chosen.is_empty() {
         println!("Нечего удалять по заданным фильтрам.");
         return Ok(());
@@ -74,63 +74,13 @@ pub fn cmd_clean(
 pub fn cmd_tui(env: &Env) -> Result<()> {
     let theme = env.config.theme.unwrap_or_else(detect_from_env);
     let app = App::new(theme, env.first_run, is_root());
-    run(app, build_scan_job(env), build_delete_runner(env))?;
+    let jobs = Jobs {
+        scan: build_scan_job(env),
+        delete: build_delete_runner(env),
+        purge: build_purge_runner(env),
+    };
+    run(app, jobs)?;
     Ok(())
-}
-
-fn build_delete_runner(env: &Env) -> DeleteRunner {
-    let config = env.config.clone();
-    let home = env.home.clone();
-    Box::new(move |entries, disposition, tx| {
-        let total = entries.len();
-        let Ok(fs) = RealFs::new() else {
-            let _ = tx.send(DeleteMsg::Done(Summary {
-                count: 0,
-                freed: 0,
-                trashed: 0,
-                failed: total,
-                partial: 0,
-                untouched: 0,
-            }));
-            return;
-        };
-        let elevated = is_root();
-        let deleter = Deleter::new(disposition, false);
-        let mut summary = Summary::default();
-        for (i, entry) in entries.iter().enumerate() {
-            let _ = tx.send(DeleteMsg::Progress {
-                message: entry.display.clone(),
-                done: i,
-                total,
-                freed: summary.freed + summary.trashed,
-            });
-            if entry.kind == CleanupKind::NativeCommand {
-                match entry.native.as_ref().map(native::run_spec) {
-                    Some(Err(_)) => summary.failed += 1,
-                    Some(Ok(out)) => {
-                        summary.freed +=
-                            docker::parse_reclaimed(&out).unwrap_or(entry.physical_bytes);
-                        summary.count += 1;
-                    }
-                    None => summary.count += 1,
-                }
-                continue;
-            }
-            let guard = entry.guard(&fs, &config, &home, elevated);
-            match deleter.remove(&guard, &entry.path, &entry.companions, entry.kind) {
-                Ok(report) => {
-                    summary.failed += report.failed.len();
-                    summary.count += report.done.iter().filter(|i| !i.untouched).count();
-                    summary.untouched += report.done.iter().filter(|i| i.untouched).count();
-                    summary.partial += report.done.iter().filter(|i| i.partial).count();
-                    summary.freed += report.bytes(Disposition::Permanent);
-                    summary.trashed += report.bytes(Disposition::Trash);
-                }
-                Err(_) => summary.failed += 1,
-            }
-        }
-        let _ = tx.send(DeleteMsg::Done(summary));
-    })
 }
 
 fn build_scan_job(env: &Env) -> ScanJob {
@@ -172,24 +122,13 @@ fn build_scan_job(env: &Env) -> ScanJob {
                 });
             },
         );
-        if is_root() {
-            let _ = tx.send(ScanMsg::Progress {
-                message: "Снимки Time Machine и системные кэши…".into(),
-                done: 0,
-                total: 0,
-                bytes: result.total_bytes,
-            });
-            for cat in [
-                snapshot_category(),
-                system_caches_category(&fs, &config, &home, is_root()),
-            ]
-            .into_iter()
-            .flatten()
-            {
-                result.total_bytes += cat.total_bytes;
-                result.categories.push(cat);
-            }
-        }
+        let _ = tx.send(ScanMsg::Progress {
+            message: crate::extras::progress_message().into(),
+            done: 0,
+            total: 0,
+            bytes: result.total_bytes,
+        });
+        crate::extras::complete(&mut result, &fs, &config, &home);
         let _ = tx.send(ScanMsg::Done(result));
     })
 }

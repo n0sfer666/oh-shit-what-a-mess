@@ -1,10 +1,10 @@
+use super::companions::{attach, sibling_companions};
 use super::entry::{child_display, entry_for, root_label};
 use super::{ScanCtx, ScanEntry};
 use crate::category::{NativeSpec, Target};
 use crate::fsops::FsOps;
 use crate::paths::expand_tilde;
 use crate::process::ProcessProbe;
-use crate::size::{measure_where, Measure};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -38,19 +38,29 @@ where
     }
     if !target.enumerate {
         return entry_for(ctx, target, &root, &target.path)
+            .map(|entry| attach(ctx, target, entry, sibling_companions(ctx, target, &root)))
             .into_iter()
             .collect();
     }
     let Ok(children) = ctx.fs.read_dir(&canonical(ctx.fs, &root)) else {
         return Vec::new();
     };
+    let children: Vec<PathBuf> = children
+        .into_iter()
+        .filter(|child| !(target.versioned && is_hidden_file(ctx.fs, child)))
+        .collect();
     if target.group_by_stem {
         return grouped_entries(ctx, target, &children);
     }
     children
         .into_iter()
         .filter_map(|child| {
-            let display = child_display(&child);
+            let display = match (target.versioned, root.file_name()) {
+                (true, Some(parent)) => {
+                    format!("{}/{}", parent.to_string_lossy(), child_display(&child))
+                }
+                _ => child_display(&child),
+            };
             entry_for(ctx, target, &child, &display)
         })
         .collect()
@@ -58,6 +68,13 @@ where
 
 fn canonical<F: FsOps>(fs: &F, path: &Path) -> PathBuf {
     fs.canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn is_hidden_file<F: FsOps>(fs: &F, path: &Path) -> bool {
+    let dotted = path
+        .file_name()
+        .is_some_and(|n| n.to_string_lossy().starts_with('.'));
+    dotted && fs.meta(path).is_ok_and(|m| !m.is_dir)
 }
 
 fn measured_native<F, P, N>(
@@ -101,6 +118,8 @@ where
         partial: false,
         needs_root: target.needs_root,
         permanent_only: true,
+        blocking_app: None,
+        blocked: false,
     })
 }
 
@@ -139,30 +158,13 @@ where
     F: FsOps,
     P: ProcessProbe,
 {
-    let guard = ctx.guard_for(target);
     let is_dir = |p: &Path| ctx.fs.meta(p).map(|m| m.is_dir).unwrap_or(false);
     crate::grouping::group_by_stem(children, crate::grouping::GROUPED_EXTENSIONS, is_dir)
         .into_iter()
         .filter_map(|group| {
             let display = child_display(&group.primary);
-            let mut entry = entry_for(ctx, target, &group.primary, &display)?;
-            let (allowed, refused): (Vec<PathBuf>, Vec<PathBuf>) = group
-                .companions
-                .into_iter()
-                .partition(|extra| guard.allows(extra));
-            entry.companions = allowed;
-            if !refused.is_empty() {
-                entry.kind = crate::category::CleanupKind::InfoOnly;
-                entry.risk = entry.risk.max(crate::risk::RiskLevel::Caution);
-            }
-            for extra in &entry.companions {
-                let m = measure_where(ctx.fs, extra, &|p, meta| guard.allows_meta(p, meta))
-                    .unwrap_or_else(|_| Measure::unknown());
-                entry.physical_bytes += m.bytes;
-                entry.shared_bytes += m.shared_bytes;
-                entry.partial |= m.partial;
-            }
-            Some(entry)
+            let entry = entry_for(ctx, target, &group.primary, &display)?;
+            Some(attach(ctx, target, entry, group.companions))
         })
         .collect()
 }

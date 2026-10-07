@@ -141,6 +141,8 @@ fn deleting_phase_summary_and_done_quit() {
         failed: 1,
         partial: 0,
         untouched: 0,
+        kept_in_trash: 0,
+        blocked: 0,
     });
     assert_eq!(a.phase, Phase::Done);
     a.on_key(Key::Quit);

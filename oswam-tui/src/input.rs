@@ -10,11 +10,11 @@ impl App {
             Phase::Scanning => self.on_scanning_key(key),
             Phase::Results => self.on_results_key(key),
             Phase::Deleting => {}
-            Phase::Done => {
-                if matches!(key, Key::Quit | Key::Cancel | Key::Enter) {
-                    self.should_quit = true;
-                }
-            }
+            Phase::Done => match key {
+                Key::Quit | Key::Cancel | Key::Enter => self.should_quit = true,
+                Key::Purge => self.request_purge(),
+                _ => {}
+            },
         }
     }
 
@@ -55,7 +55,18 @@ impl App {
             Key::Top => self.set_cursor(0),
             Key::Bottom => self.set_cursor(usize::MAX),
             Key::Space => self.toggle_selection(),
-            Key::Enter | Key::Cancel => {}
+            Key::SelectRecommended => self.select_recommended(),
+            Key::SelectNone => self.selected.clear(),
+            Key::Enter => self.dive(),
+            Key::Cancel | Key::Purge => {}
+        }
+    }
+
+    fn dive(&mut self) {
+        match self.panel {
+            Panel::Sidebar => self.panel = Panel::Table,
+            Panel::Table => self.toggle_selection(),
+            Panel::Description => {}
         }
     }
 

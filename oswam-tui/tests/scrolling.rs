@@ -1,6 +1,7 @@
 mod support;
 
 use oswam_tui::app::{Key, Panel};
+use oswam_tui::panels::help_lines;
 use support::{drawn_text, render_once, results_app};
 
 #[test]
@@ -18,7 +19,11 @@ fn help_scroll_stops_at_the_last_line() {
         a.on_key(Key::Down);
     }
     assert!(a.help_visible);
-    assert!(a.help_scroll < 9, "{}", a.help_scroll);
+    assert!(
+        usize::from(a.help_scroll) < help_lines().len(),
+        "{}",
+        a.help_scroll
+    );
 }
 
 #[test]

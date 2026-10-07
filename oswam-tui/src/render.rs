@@ -1,14 +1,14 @@
-use crate::app::{App, Panel, Phase};
+use crate::app::{App, Phase};
 use crate::modals::{render_confirm, render_done};
-use crate::panels::{focus_block, render_description, render_help, render_table};
+use crate::panels::{render_description, render_help, render_table};
 use crate::screens::{render_deleting, render_scanning, render_welcome};
-use crate::theme::{palette, risk_color, risk_symbol};
+use crate::sidebar::render_sidebar;
+use crate::theme::palette;
 use oswam_core::format::human_bytes;
-use oswam_core::select::is_deletable;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{List, ListItem, Paragraph};
+use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
 pub fn render(frame: &mut Frame, app: &App) {
@@ -40,69 +40,29 @@ fn render_results(frame: &mut Frame, app: &App) {
     }
 }
 
-fn category_checkbox(app: &App, ci: usize) -> &'static str {
-    let entries = &app.result.categories[ci].entries;
-    let deletable: Vec<usize> = entries
-        .iter()
-        .enumerate()
-        .filter(|(_, e)| is_deletable(e))
-        .map(|(ei, _)| ei)
-        .collect();
-    if deletable.is_empty() {
-        return "[-]";
-    }
-    let selected = deletable
-        .iter()
-        .filter(|ei| app.is_selected(ci, **ei))
-        .count();
-    if selected == 0 {
-        "[ ]"
-    } else if selected == deletable.len() {
-        "[x]"
-    } else {
-        "[~]"
-    }
-}
-
-fn render_sidebar(frame: &mut Frame, app: &App, area: Rect) {
-    let focused = app.panel == Panel::Sidebar;
-    let block = focus_block("Категории", focused, app);
-    let order = app.ordered_categories();
-    let items: Vec<ListItem> = order
-        .iter()
-        .enumerate()
-        .map(|(row, ci)| {
-            let cat = &app.result.categories[*ci];
-            let risk = crate::app::max_risk(&app.result, *ci);
-            let mut style = Style::default().fg(risk_color(risk));
-            if focused && row == app.category_cursor {
-                style = style.add_modifier(Modifier::REVERSED);
-            }
-            let line = Line::from(vec![Span::styled(
-                format!(
-                    "{} {} {} {}  {}",
-                    category_checkbox(app, *ci),
-                    cat.glyph,
-                    risk_symbol(risk),
-                    cat.name,
-                    human_bytes(cat.total_bytes),
-                ),
-                style,
-            )]);
-            ListItem::new(line)
-        })
-        .collect();
-    frame.render_widget(List::new(items).block(block), area);
-}
-
 fn render_action_bar(frame: &mut Frame, app: &App, area: Rect) {
     let pal = palette(app.theme);
-    let text = format!(
-        " Ctrl+P: удалить · Space: выбор · o: группировка · t: тема · ?: справка · q: выход   Выбрано: {}",
-        human_bytes(app.selected_total_bytes())
-    );
+    let unknown = app.selected_unknown_size();
+    let unknown = if unknown > 0 {
+        format!(" (+{unknown} ?)")
+    } else {
+        String::new()
+    };
+    let line = Line::from(vec![
+        Span::styled(
+            format!(
+                " К удалению {}{unknown}",
+                human_bytes(app.selected_total_bytes())
+            ),
+            Style::default().fg(pal.accent).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(format!(
+            " из {} │ Ctrl+P удалить · Space выбор · ? справка · a реком. · n снять · q выход",
+            human_bytes(app.reclaimable_total())
+        )),
+    ]);
     frame.render_widget(
-        Paragraph::new(text).style(Style::default().fg(pal.fg).bg(pal.bg)),
+        Paragraph::new(line).style(Style::default().fg(pal.fg).bg(pal.bg)),
         area,
     );
 }

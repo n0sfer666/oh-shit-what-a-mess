@@ -1,3 +1,4 @@
+mod companions;
 mod entry;
 mod target;
 #[cfg(test)]
@@ -33,6 +34,10 @@ pub struct ScanEntry {
     pub needs_root: bool,
     #[serde(default)]
     pub permanent_only: bool,
+    #[serde(default)]
+    pub blocking_app: Option<String>,
+    #[serde(default)]
+    pub blocked: bool,
 }
 
 impl ScanEntry {
@@ -140,9 +145,9 @@ where
 }
 
 fn reclaimable_bytes(entry: &ScanEntry) -> u64 {
-    if entry.kind == CleanupKind::InfoOnly || entry.risk == RiskLevel::Never {
-        0
-    } else {
+    if crate::select::is_deletable(entry) {
         entry.physical_bytes
+    } else {
+        0
     }
 }

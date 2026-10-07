@@ -6,6 +6,7 @@ mod companions;
 mod guarded;
 mod hardlinks;
 mod partial;
+mod trashed;
 mod untouched;
 
 const HOME: &str = "/Users/tester";

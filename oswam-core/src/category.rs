@@ -36,6 +36,9 @@ pub struct Target {
     pub needs_root: bool,
     pub group_by_stem: bool,
     pub measured: bool,
+    pub blocking_app: Option<&'static str>,
+    pub companions: Vec<&'static str>,
+    pub versioned: bool,
 }
 
 impl Target {
@@ -51,6 +54,9 @@ impl Target {
             needs_root: false,
             group_by_stem: false,
             measured: false,
+            blocking_app: None,
+            companions: Vec::new(),
+            versioned: false,
         }
     }
 
@@ -80,6 +86,21 @@ impl Target {
             depth,
             ..Self::new(root, kind, risk)
         }
+    }
+
+    pub fn blocked_while_running(mut self, app: &'static str) -> Self {
+        self.blocking_app = Some(app);
+        self
+    }
+
+    pub fn versioned(mut self) -> Self {
+        self.versioned = true;
+        self
+    }
+
+    pub fn with_companions(mut self, names: &[&'static str]) -> Self {
+        self.companions = names.to_vec();
+        self
     }
 
     pub fn needing_root(mut self) -> Self {

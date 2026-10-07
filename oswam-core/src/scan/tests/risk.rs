@@ -136,3 +136,40 @@ fn a_shared_blob_is_split_between_the_targets_that_hold_it() {
     assert_eq!(cache.physical_bytes, 20 * 512);
     assert_eq!(info.physical_bytes, (20 + 8) * 512);
 }
+
+#[test]
+fn a_system_info_target_shows_its_weight_but_never_counts_it() {
+    let mut fs = FakeFs::default();
+    fs.dir("/System/Volumes/VM", &["/System/Volumes/VM/swapfile0"]);
+    fs.file("/System/Volumes/VM/swapfile0", 64);
+    let res = Env::new(fs).scan(&one(
+        "c",
+        Target::new(
+            "/System/Volumes/VM",
+            CleanupKind::InfoOnly,
+            RiskLevel::Danger,
+        ),
+    ));
+    let info = &res.categories[0].entries[0];
+    assert_eq!(info.risk, RiskLevel::Never);
+    assert!(info.physical_bytes >= 64 * 512);
+    assert_eq!(res.total_bytes, 0);
+}
+
+#[test]
+fn a_protected_descendant_is_left_out_of_an_info_targets_weight() {
+    let mut fs = FakeFs::default();
+    fs.dir(
+        "/Users/tester/data",
+        &["/Users/tester/data/keep", "/Users/tester/data/rest"],
+    );
+    fs.file("/Users/tester/data/keep", 100);
+    fs.file("/Users/tester/data/rest", 10);
+    let res = Env::protecting(fs, "~/data/keep").scan(&one(
+        "c",
+        Target::new("~/data", CleanupKind::InfoOnly, RiskLevel::Danger),
+    ));
+    let info = &res.categories[0].entries[0];
+    assert!(info.physical_bytes < 100 * 512, "{}", info.physical_bytes);
+    assert!(info.physical_bytes >= 10 * 512);
+}

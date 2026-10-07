@@ -26,6 +26,11 @@ pub fn category() -> Category {
             Target::enumerated("~/Library/Android/sdk/system-images", DeletePath, Caution),
             Target::enumerated("~/Library/Android/sdk/ndk", DeletePath, Caution),
             Target::new("~/Library/Android/sdk/sources", DeletePath, Caution),
+            Target::new(
+                "~/Library/Android/sdk/.downloadIntermediates",
+                DeleteContents,
+                Caution,
+            ),
             native(
                 "Xcode: недоступные симуляторы",
                 &SIMCTL,

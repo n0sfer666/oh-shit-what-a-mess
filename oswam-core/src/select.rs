@@ -9,10 +9,24 @@ pub struct Selection {
 }
 
 pub fn is_deletable(entry: &ScanEntry) -> bool {
-    entry.risk != RiskLevel::Never && entry.kind != CleanupKind::InfoOnly
+    entry.risk != RiskLevel::Never && entry.kind != CleanupKind::InfoOnly && !entry.blocked
 }
 
 pub fn selectable<'a>(result: &'a ScanResult, sel: &Selection) -> Vec<&'a ScanEntry> {
+    in_scope(result, sel)
+        .into_iter()
+        .filter(|e| is_deletable(e))
+        .collect()
+}
+
+pub fn blocked<'a>(result: &'a ScanResult, sel: &Selection) -> Vec<&'a ScanEntry> {
+    in_scope(result, sel)
+        .into_iter()
+        .filter(|e| e.blocked)
+        .collect()
+}
+
+fn in_scope<'a>(result: &'a ScanResult, sel: &Selection) -> Vec<&'a ScanEntry> {
     result
         .categories
         .iter()
@@ -21,7 +35,6 @@ pub fn selectable<'a>(result: &'a ScanResult, sel: &Selection) -> Vec<&'a ScanEn
             None => true,
         })
         .flat_map(|c| c.entries.iter())
-        .filter(|e| is_deletable(e))
         .filter(|e| !sel.safe_only || e.risk == RiskLevel::Safe)
         .collect()
 }
@@ -51,6 +64,8 @@ mod tests {
             partial: false,
             needs_root: false,
             permanent_only: false,
+            blocking_app: None,
+            blocked: false,
         }
     }
 
@@ -116,5 +131,20 @@ mod tests {
             },
         );
         assert!(sel.is_empty());
+    }
+
+    #[test]
+    fn a_blocked_entry_is_reported_instead_of_selected() {
+        let mut r = result();
+        let mut held = entry(RiskLevel::Caution, CleanupKind::DeletePath);
+        held.blocked = true;
+        r.categories[1].entries.push(held);
+        assert_eq!(selectable(&r, &Selection::default()).len(), 1);
+        assert_eq!(blocked(&r, &Selection::default()).len(), 1);
+        let other = Selection {
+            safe_only: false,
+            categories: Some(vec!["system".into()]),
+        };
+        assert!(blocked(&r, &other).is_empty());
     }
 }

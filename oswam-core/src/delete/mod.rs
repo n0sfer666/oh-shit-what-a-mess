@@ -1,9 +1,11 @@
 mod report;
 #[cfg(test)]
 mod tests;
+mod trashed;
 mod walk;
 
-pub use report::{DeleteFailure, DeleteReport, DeletedItem, Disposition};
+pub use report::{DeleteFailure, DeleteReport, DeletedItem, Disposition, Trashed};
+pub use trashed::purge_trashed;
 
 use crate::category::CleanupKind;
 use crate::fsops::FsOps;
@@ -84,6 +86,7 @@ impl Deleter {
         let (kept, touched) = (walked.kept, walked.touched);
         let stalled = !touched && !walked.failures.is_empty();
         report.failed.extend(walked.failures);
+        report.trashed.extend(walked.trashed);
         if stalled {
             return true;
         }

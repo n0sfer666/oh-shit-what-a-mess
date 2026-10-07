@@ -3,7 +3,7 @@ use crate::event::map_key;
 use crate::render::render;
 use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::{execute, terminal};
-use oswam_core::delete::Disposition;
+use oswam_core::delete::{Disposition, Trashed};
 use oswam_core::scan::{ScanEntry, ScanResult};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
@@ -30,15 +30,23 @@ pub enum DeleteMsg {
         total: usize,
         freed: u64,
     },
-    Done(Summary),
+    Done(Summary, Vec<Trashed>),
+    Purged(Summary),
 }
 
 pub type ScanJob = Box<dyn FnOnce(Sender<ScanMsg>) + Send>;
 pub type DeleteRunner = Box<dyn FnOnce(Vec<ScanEntry>, Disposition, Sender<DeleteMsg>) + Send>;
+pub type PurgeRunner = Box<dyn FnOnce(Vec<Trashed>, Sender<DeleteMsg>) + Send>;
 
-pub fn run(mut app: App, scan_job: ScanJob, delete_runner: DeleteRunner) -> io::Result<()> {
+pub struct Jobs {
+    pub scan: ScanJob,
+    pub delete: DeleteRunner,
+    pub purge: PurgeRunner,
+}
+
+pub fn run(mut app: App, jobs: Jobs) -> io::Result<()> {
     let mut terminal = setup()?;
-    let outcome = event_loop(&mut terminal, &mut app, scan_job, delete_runner);
+    let outcome = event_loop(&mut terminal, &mut app, jobs);
     restore(&mut terminal)?;
     outcome
 }
@@ -56,14 +64,10 @@ fn restore(terminal: &mut Tui) -> io::Result<()> {
     terminal.show_cursor()
 }
 
-fn event_loop(
-    terminal: &mut Tui,
-    app: &mut App,
-    scan_job: ScanJob,
-    delete_runner: DeleteRunner,
-) -> io::Result<()> {
-    let mut scan_job = Some(scan_job);
-    let mut delete_runner = Some(delete_runner);
+fn event_loop(terminal: &mut Tui, app: &mut App, jobs: Jobs) -> io::Result<()> {
+    let mut scan_job = Some(jobs.scan);
+    let mut delete_runner = Some(jobs.delete);
+    let mut purge_runner = Some(jobs.purge);
     let mut scan_rx: Option<Receiver<ScanMsg>> = None;
     let mut del_rx: Option<Receiver<DeleteMsg>> = None;
 
@@ -104,6 +108,16 @@ fn event_loop(
                 }
             }
         }
+        if app.purge_requested {
+            app.purge_requested = false;
+            if let Some(runner) = purge_runner.take() {
+                let items = std::mem::take(&mut app.trashed);
+                app.update_delete("Очищаю Корзину…".into(), 0, items.len(), 0);
+                let (tx, rx) = channel();
+                del_rx = Some(rx);
+                std::thread::spawn(move || runner(items, tx));
+            }
+        }
         if let Some(rx) = &del_rx {
             drain_delete(rx, app);
         }
@@ -137,7 +151,11 @@ fn drain_delete(rx: &Receiver<DeleteMsg>, app: &mut App) {
                 total,
                 freed,
             } => app.update_delete(message, done, total, freed),
-            DeleteMsg::Done(summary) => app.set_summary(summary),
+            DeleteMsg::Done(summary, trashed) => {
+                app.trashed = trashed;
+                app.set_summary(summary);
+            }
+            DeleteMsg::Purged(summary) => app.set_purged(summary),
         }
     }
 }

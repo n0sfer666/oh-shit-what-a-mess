@@ -27,6 +27,14 @@ pub struct DeletedItem {
     pub untouched: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Trashed {
+    pub path: PathBuf,
+    pub bytes: u64,
+    pub ino: u64,
+    pub dev: i64,
+}
+
 #[derive(Debug)]
 pub struct DeleteFailure {
     pub path: PathBuf,
@@ -37,6 +45,7 @@ pub struct DeleteFailure {
 pub struct DeleteReport {
     pub done: Vec<DeletedItem>,
     pub failed: Vec<DeleteFailure>,
+    pub trashed: Vec<Trashed>,
 }
 
 impl DeleteReport {
@@ -51,6 +60,7 @@ impl DeleteReport {
     pub fn absorb(&mut self, other: DeleteReport) {
         self.done.extend(other.done);
         self.failed.extend(other.failed);
+        self.trashed.extend(other.trashed);
     }
 }
 
@@ -75,7 +85,7 @@ mod tests {
                 item(10, Disposition::Trash),
                 item(4, Disposition::Permanent),
             ],
-            failed: Vec::new(),
+            ..DeleteReport::default()
         };
         assert_eq!(report.bytes(Disposition::Trash), 10);
         assert_eq!(report.bytes(Disposition::Permanent), 4);
@@ -85,7 +95,7 @@ mod tests {
     fn absorb_merges_both_sides() {
         let mut report = DeleteReport {
             done: vec![item(1, Disposition::Trash)],
-            failed: Vec::new(),
+            ..DeleteReport::default()
         };
         report.absorb(DeleteReport {
             done: vec![item(2, Disposition::Trash)],
@@ -93,6 +103,7 @@ mod tests {
                 path: PathBuf::from("/Users/tester/y"),
                 error: io::Error::new(io::ErrorKind::PermissionDenied, "denied"),
             }],
+            ..DeleteReport::default()
         });
         assert_eq!(report.done.len(), 2);
         assert_eq!(report.failed.len(), 1);

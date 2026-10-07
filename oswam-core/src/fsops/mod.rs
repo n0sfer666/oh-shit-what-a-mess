@@ -58,7 +58,7 @@ pub trait FsOps {
     fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>>;
     fn remove_file(&self, path: &Path) -> io::Result<()>;
     fn remove_dir(&self, path: &Path) -> io::Result<()>;
-    fn move_to_trash(&self, path: &Path) -> io::Result<()>;
+    fn move_to_trash(&self, path: &Path) -> io::Result<PathBuf>;
     fn can_trash(&self, path: &Path) -> bool {
         let _ = path;
         true

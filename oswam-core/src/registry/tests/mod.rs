@@ -1,7 +1,10 @@
 mod catalog;
+mod claude;
 mod honesty;
 mod invariants;
 mod natives;
+mod nesting;
+mod system_data;
 
 use super::*;
 
@@ -17,6 +20,13 @@ fn all_targets() -> Vec<Target> {
         .into_iter()
         .flat_map(|c| c.targets)
         .collect()
+}
+
+fn deletes(target: &Target) -> bool {
+    matches!(
+        target.kind,
+        CleanupKind::DeleteContents | CleanupKind::DeletePath
+    )
 }
 
 fn natives() -> Vec<NativeSpec> {
@@ -52,14 +62,15 @@ fn has_expected_categories() {
     assert_eq!(
         ids,
         vec![
-            "system",
+            "system-data",
             "dev",
             "simulators",
             "containers",
             "browsers",
+            "claude",
             "projects",
             "big-data",
-            "elevated",
+            "trash",
         ]
     );
 }

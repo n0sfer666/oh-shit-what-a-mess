@@ -1,5 +1,5 @@
 use super::FakeFs;
-use crate::fsops::{is_inside_trash, FsOps, Meta};
+use crate::fsops::{is_inside_trash, trash_root, FsOps, Meta};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -36,10 +36,11 @@ impl FsOps for FakeFs {
         Ok(())
     }
 
-    fn move_to_trash(&self, path: &Path) -> io::Result<()> {
+    fn move_to_trash(&self, path: &Path) -> io::Result<PathBuf> {
         self.guard_write(path)?;
         self.trashed.borrow_mut().push(path.to_path_buf());
-        Ok(())
+        let root = self.home.clone().unwrap_or_else(|| PathBuf::from("/"));
+        Ok(trash_root(&root).join(path.file_name().unwrap_or_default()))
     }
 
     fn can_trash(&self, path: &Path) -> bool {

@@ -1,4 +1,5 @@
 use oswam_core::category::CleanupKind;
+use oswam_core::registry::SYSTEM_DATA_ID;
 use oswam_core::risk::RiskLevel;
 use oswam_core::scan::ScanEntry;
 
@@ -20,6 +21,9 @@ pub fn what_is_it(category_id: &str, entry: &ScanEntry) -> &'static str {
             _ => "Локальные снимки Time Machine — удаляются все, кроме самого свежего.",
         };
     }
+    if category_id == SYSTEM_DATA_ID {
+        return crate::system_data_note::what_is_it(entry);
+    }
     if entry.kind == CleanupKind::InfoOnly {
         if category_id == "simulators" {
             return if entry.path.ends_with("CoreSimulator/Devices") {
@@ -27,9 +31,6 @@ pub fn what_is_it(category_id: &str, entry: &ScanEntry) -> &'static str {
             } else {
                 "Комплект файлов, часть которого защищена: удалить можно только целиком, поэтому показано для справки."
             };
-        }
-        if category_id == "system-caches" {
-            return "Системный кэш под защитой (SIP или ваш protected_paths) — показан для справки, удалять его OSWaM не станет.";
         }
         return "Данные приложения — показаны для справки, чистить только вручную в самом приложении.";
     }
@@ -39,17 +40,13 @@ pub fn what_is_it(category_id: &str, entry: &ScanEntry) -> &'static str {
     if entry.path.ends_with(".vscode/extensions") {
         return "Расширения VS Code вместе с их списком (extensions.json): что было установлено, восстанавливать придётся вручную.";
     }
-    if entry.path.ends_with("Developer/CommandLineTools") {
-        return "Command Line Tools целиком: без Xcode.app это выключает git, clang и make до `xcode-select --install` (~1.5 GB заново).";
-    }
     if entry.risk == RiskLevel::Danger {
         return danger_text(category_id);
     }
-    if category_id == "elevated" && entry.kind == CleanupKind::NativeCommand {
-        return "Единый системный лог — очистка необратима: диагностика прошлых сбоев пропадёт.";
+    if category_id == "claude" {
+        return crate::claude_note::what_is_it(entry);
     }
     match category_id {
-        "system" => "Системный кэш/мусор — ОС и приложения пересоздадут при работе.",
         "dev" => "Dev-кэш или артефакт — инструмент перекачает/пересоберёт при следующем запуске.",
         "simulators" => {
             "Образ симулятора/эмулятора — вернётся после повторной загрузки в Xcode/Android Studio."
@@ -60,9 +57,6 @@ pub fn what_is_it(category_id: &str, entry: &ScanEntry) -> &'static str {
         }
         "projects" => "Build-артефакт проекта — вернётся после сборки (cargo build / npm install).",
         "big-data" => "Крупные данные — освободят много места, но потребуют повторной загрузки.",
-        "elevated" => {
-            "Системный кэш/лог вне домашней папки — доступен только при запуске под sudo."
-        }
         "snapshots" => "Локальный снимок Time Machine — удаляется, кроме самого свежего.",
         _ => "Кэш/артефакт — обычно безопасно удалять.",
     }
@@ -70,9 +64,6 @@ pub fn what_is_it(category_id: &str, entry: &ScanEntry) -> &'static str {
 
 fn danger_text(category_id: &str) -> &'static str {
     match category_id {
-        "system-caches" => {
-            "Общесистемный кэш вне домашней папки: приложения его пересоздадут, но удаление идёт под root, минуя Корзину, и может задеть работающие процессы."
-        }
         "simulators" => {
             "Эмулятор со СВОИМ состоянием: установленные приложения, аккаунты и снапшоты пропадут навсегда."
         }
@@ -85,11 +76,9 @@ fn danger_text(category_id: &str) -> &'static str {
     }
 }
 
-pub fn empty_note(category_id: &str, elevated: bool) -> &'static str {
-    match (category_id, elevated) {
-        ("elevated", false) => "Раздел доступен только под sudo — запустите `sudo oswam`.",
-        ("elevated", true) => "Системные кэши и логи уже чисты — удалять нечего.",
-        ("", _) => "Нет данных для отображения.",
+pub fn empty_note(category_id: &str) -> &'static str {
+    match category_id {
+        "" => "Нет данных для отображения.",
         _ => "В этой категории ничего не найдено — чистить нечего.",
     }
 }
@@ -114,6 +103,8 @@ mod tests {
             partial: false,
             needs_root: false,
             permanent_only: false,
+            blocking_app: None,
+            blocked: false,
         }
     }
 
@@ -121,7 +112,7 @@ mod tests {
     fn new_categories_have_their_own_text() {
         let e = entry(CleanupKind::DeletePath, RiskLevel::Caution, 1);
         let fallback = what_is_it("unknown", &e);
-        for id in ["simulators", "containers", "elevated"] {
+        for id in ["simulators", "containers", SYSTEM_DATA_ID] {
             assert_ne!(what_is_it(id, &e), fallback, "{id}");
         }
     }
@@ -136,27 +127,6 @@ mod tests {
     }
 
     #[test]
-    fn empty_elevated_category_explains_sudo() {
-        assert!(empty_note("elevated", false).contains("sudo"));
-        assert!(!empty_note("elevated", true).contains("sudo"));
-        assert_ne!(empty_note("dev", false), empty_note("elevated", false));
-    }
-
-    #[test]
-    fn a_protected_system_cache_is_not_called_app_data() {
-        let e = entry(CleanupKind::InfoOnly, RiskLevel::Never, 1);
-        let text = what_is_it("system-caches", &e);
-        assert!(!text.contains("Данные приложения"), "{text}");
-        assert!(text.contains("защит"), "{text}");
-    }
-
-    #[test]
-    fn system_log_erase_warns_about_irreversibility() {
-        let e = entry(CleanupKind::NativeCommand, RiskLevel::Caution, 0);
-        assert!(what_is_it("elevated", &e).contains("необратима"));
-    }
-
-    #[test]
     fn simulator_devices_are_not_called_a_protected_bundle() {
         let mut e = entry(CleanupKind::InfoOnly, RiskLevel::Caution, 1);
         e.path = PathBuf::from("/Users/tester/Library/Developer/CoreSimulator/Devices");
@@ -165,15 +135,6 @@ mod tests {
         assert!(!text.contains("защищена"), "{text}");
         let other = entry(CleanupKind::InfoOnly, RiskLevel::Caution, 1);
         assert_ne!(what_is_it("simulators", &other), text);
-    }
-
-    #[test]
-    fn a_toolchain_is_not_described_as_a_cache() {
-        let mut e = entry(CleanupKind::DeletePath, RiskLevel::Caution, 1);
-        e.path = PathBuf::from("/Library/Developer/CommandLineTools");
-        let text = what_is_it("elevated", &e);
-        assert!(text.contains("xcode-select"), "{text}");
-        assert!(!text.contains("кэш"), "{text}");
     }
 
     #[test]

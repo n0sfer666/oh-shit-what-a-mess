@@ -1,27 +1,31 @@
 mod bigdata;
 mod browsers;
+mod claude;
 mod containers;
 mod dev;
-mod elevated;
 mod projects;
 mod simulators;
-mod system;
+mod system_data;
 #[cfg(test)]
 mod tests;
+mod trash;
 
 use crate::category::{Category, CleanupKind, NativeSpec, Target};
 use crate::risk::RiskLevel;
 
+pub use system_data::ID as SYSTEM_DATA_ID;
+
 pub fn builtin_categories() -> Vec<Category> {
     vec![
-        system::category(),
+        system_data::category(),
         dev::category(),
         simulators::category(),
         containers::category(),
         browsers::category(),
+        claude::category(),
         projects::category(),
         bigdata::category(),
-        elevated::category(),
+        trash::category(),
     ]
 }
 

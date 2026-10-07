@@ -28,6 +28,8 @@ fn sample() -> ScanResult {
                     partial: false,
                     needs_root: false,
                     permanent_only: false,
+                    blocking_app: None,
+                    blocked: false,
                 }],
                 total_bytes: 1_500_000,
             },
@@ -48,6 +50,8 @@ fn sample() -> ScanResult {
                     partial: false,
                     needs_root: false,
                     permanent_only: false,
+                    blocking_app: None,
+                    blocked: false,
                 }],
                 total_bytes: 8_500_000_000,
             },
@@ -119,6 +123,8 @@ fn big_result(n: usize) -> ScanResult {
             partial: false,
             needs_root: false,
             permanent_only: false,
+            blocking_app: None,
+            blocked: false,
         })
         .collect();
     ScanResult {
@@ -154,13 +160,13 @@ fn table_scrolls_to_keep_cursor_visible() {
 fn info_only_entry_is_marked_and_unselectable() {
     let mut app = results_app(false);
     app.on_key(Key::Down);
+    app.on_key(Key::Right);
     let out = draw(&app);
     assert!(out.contains("ⓘ"), "info marker must show:\n{out}");
     assert!(
         out.contains("удаление недоступно"),
         "description must explain:\n{out}"
     );
-    app.on_key(Key::Right);
     let before = app.selected_total_bytes();
     app.on_key(Key::Space);
     assert_eq!(
@@ -172,7 +178,8 @@ fn info_only_entry_is_marked_and_unselectable() {
 
 #[test]
 fn description_shows_freed_size_for_deletable() {
-    let app = results_app(false);
+    let mut app = results_app(false);
+    app.on_key(Key::Right);
     let out = draw(&app);
     assert!(
         out.contains("Освободится: 1.5 MB"),

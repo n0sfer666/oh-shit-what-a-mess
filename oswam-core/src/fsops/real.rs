@@ -131,7 +131,7 @@ impl FsOps for RealFs {
         std::fs::remove_dir(path)
     }
 
-    fn move_to_trash(&self, path: &Path) -> io::Result<()> {
+    fn move_to_trash(&self, path: &Path) -> io::Result<PathBuf> {
         if !self.can_trash(path) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -150,7 +150,8 @@ impl FsOps for RealFs {
             dest = self.trash.join(alt);
             n += 1;
         }
-        std::fs::rename(path, dest)
+        std::fs::rename(path, &dest)?;
+        Ok(dest)
     }
 
     fn can_trash(&self, path: &Path) -> bool {

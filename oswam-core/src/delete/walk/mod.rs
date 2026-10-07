@@ -1,6 +1,6 @@
 mod plan;
 
-use super::{DeleteFailure, Disposition};
+use super::{DeleteFailure, Disposition, Trashed};
 use crate::fsops::FsOps;
 use crate::guard::Guard;
 use plan::{plan_for, DirPlan, Plan};
@@ -13,6 +13,7 @@ pub(super) struct Walked {
     pub freed: u64,
     pub touched: bool,
     pub failures: Vec<DeleteFailure>,
+    pub trashed: Vec<Trashed>,
 }
 
 impl Walked {
@@ -21,6 +22,7 @@ impl Walked {
         self.freed += other.freed;
         self.touched |= other.touched;
         self.failures.extend(other.failures);
+        self.trashed.extend(other.trashed);
     }
 
     fn gone(freed: u64) -> Self {
@@ -100,8 +102,20 @@ fn trash<F: FsOps>(guard: &Guard<'_, F>, path: &Path, plan: Plan) -> Walked {
 }
 
 fn move_out<F: FsOps>(guard: &Guard<'_, F>, path: &Path, bytes: u64) -> Walked {
+    let meta = match guard.fs.meta(path) {
+        Ok(meta) => meta,
+        Err(error) => return Walked::failed(path, error),
+    };
     match guard.fs.move_to_trash(path) {
-        Ok(()) => Walked::gone(bytes),
+        Ok(dest) => Walked {
+            trashed: vec![Trashed {
+                path: dest,
+                bytes,
+                ino: meta.ino,
+                dev: meta.dev,
+            }],
+            ..Walked::gone(bytes)
+        },
         Err(error) => Walked::failed(path, error),
     }
 }

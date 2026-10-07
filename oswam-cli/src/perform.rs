@@ -1,4 +1,5 @@
 use anyhow::Result;
+use oswam_core::blocking::Recheck;
 use oswam_core::category::CleanupKind;
 use oswam_core::config::Config;
 use oswam_core::delete::{Deleter, Disposition};
@@ -6,6 +7,7 @@ use oswam_core::docker;
 use oswam_core::fsops::RealFs;
 use oswam_core::manifest::{now_rfc3339, Manifest};
 use oswam_core::scan::ScanEntry;
+use oswam_tui::explain::blocked_text;
 use std::path::Path;
 
 pub struct Runner<'a> {
@@ -29,7 +31,13 @@ pub fn execute(
 ) -> Result<Outcome> {
     let mut outcome = Outcome::default();
     let deleter = Deleter::new(disposition, dry_run);
+    let recheck = Recheck::before_delete(entries);
     for entry in entries {
+        if let Some(app) = recheck.blocker(entry) {
+            eprintln!("  пропущено {}: {}", entry.display, blocked_text(app));
+            outcome.failures += 1;
+            continue;
+        }
         if entry.kind == CleanupKind::NativeCommand {
             if let Err(err) = execute_native(entry, dry_run, &mut outcome.manifest) {
                 eprintln!("  не удалось {}: {err}", entry.display);

@@ -54,6 +54,11 @@ const PROJECT_MANIFESTS: [&str; 5] = [
     "build.gradle.kts",
 ];
 
+#[cfg(test)]
+pub(crate) fn matches_any(name: &str, patterns: &[&str]) -> bool {
+    name_matches(name, patterns) != Match::None
+}
+
 #[derive(PartialEq, Eq)]
 enum Match {
     Exact,

@@ -1,9 +1,9 @@
 use crate::scroll::ScrollView;
 use oswam_core::config::Theme;
-use oswam_core::delete::Disposition;
+use oswam_core::delete::{Disposition, Trashed};
 use oswam_core::risk::RiskLevel;
 use oswam_core::scan::ScanResult;
-use oswam_core::select::is_deletable;
+use std::cmp::Reverse;
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,6 +23,8 @@ pub struct Summary {
     pub failed: usize,
     pub partial: usize,
     pub untouched: usize,
+    pub kept_in_trash: usize,
+    pub blocked: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,6 +58,9 @@ pub enum Key {
     Group,
     Quit,
     Proceed,
+    SelectRecommended,
+    SelectNone,
+    Purge,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -88,6 +93,8 @@ pub struct App {
     pub confirm_open: bool,
     pub confirm_choice: usize,
     pub pending_delete: Option<Disposition>,
+    pub trashed: Vec<Trashed>,
+    pub purge_requested: bool,
     pub elevated: bool,
     pub(crate) first_run: bool,
 }
@@ -119,36 +126,20 @@ impl App {
             confirm_open: false,
             confirm_choice: 0,
             pending_delete: None,
+            trashed: Vec::new(),
+            purge_requested: false,
             elevated,
             first_run,
         }
     }
 
-    pub fn update_delete(&mut self, message: String, done: usize, total: usize, freed: u64) {
-        self.phase = Phase::Deleting;
-        self.delete = ScanState {
-            message,
-            done,
-            total,
-            bytes: freed,
-        };
-    }
-
-    pub fn set_summary(&mut self, summary: Summary) {
-        self.phase = Phase::Done;
-        self.summary = Some(summary);
-    }
-
-    pub fn set_result(&mut self, result: ScanResult) {
-        self.selected.clear();
-        for (ci, cat) in result.categories.iter().enumerate() {
-            for (ei, entry) in cat.entries.iter().enumerate() {
-                if is_deletable(entry) && entry.risk == RiskLevel::Safe && !entry.permanent_only {
-                    self.selected.insert((ci, ei));
-                }
-            }
+    pub fn set_result(&mut self, mut result: ScanResult) {
+        for cat in &mut result.categories {
+            cat.entries
+                .sort_by_key(|e| (e.size_unknown, Reverse(e.physical_bytes)));
         }
         self.result = result;
+        self.select_recommended();
         self.phase = Phase::Results;
         self.help_visible = self.first_run;
     }

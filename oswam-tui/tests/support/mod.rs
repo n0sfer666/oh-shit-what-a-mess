@@ -24,6 +24,8 @@ pub fn entry(risk: RiskLevel, kind: CleanupKind, bytes: u64) -> ScanEntry {
         partial: false,
         needs_root: false,
         permanent_only: false,
+        blocking_app: None,
+        blocked: false,
     }
 }
 

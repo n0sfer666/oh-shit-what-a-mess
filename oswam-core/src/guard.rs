@@ -37,8 +37,12 @@ impl<'a, F: FsOps> Guard<'a, F> {
         self.allows_meta(path, &meta)
     }
 
+    pub fn admits(&self, path: &Path) -> bool {
+        !matches_any(&self.ignore, path) && !self.config.is_protected(path, self.home)
+    }
+
     pub fn allows_meta(&self, path: &Path, meta: &Meta) -> bool {
-        if matches_any(&self.ignore, path) || self.config.is_protected(path, self.home) {
+        if !self.admits(path) {
             return false;
         }
         let mut facts = facts_from_meta(path, meta, false, false);
@@ -118,6 +122,20 @@ mod tests {
         let config = Config::default();
         assert!(!guard(&fs, &config, false).allows(Path::new("/Library/Caches/x")));
         assert!(guard(&fs, &config, true).allows(Path::new("/Library/Caches/x")));
+    }
+
+    #[test]
+    fn admits_only_checks_the_users_own_rules() {
+        let fs = fs_with("/System/Volumes/VM/swapfile0", Meta::default());
+        let config = Config {
+            ignore_globs: vec!["**/*.lock".into()],
+            protected_paths: vec!["~/keep".into()],
+            ..Config::default()
+        };
+        let g = guard(&fs, &config, false);
+        assert!(g.admits(Path::new("/System/Volumes/VM/swapfile0")));
+        assert!(!g.admits(Path::new("/Users/tester/a.lock")));
+        assert!(!g.admits(Path::new("/Users/tester/keep")));
     }
 
     #[test]

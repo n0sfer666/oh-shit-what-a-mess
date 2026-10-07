@@ -49,6 +49,12 @@ pub fn category() -> Category {
             ),
             Target::new("~/.vscode/extensions", DeleteContents, Danger),
             native(
+                "Homebrew: устаревшие версии и загрузки (brew cleanup)",
+                &[&["env", "HOMEBREW_NO_AUTOREMOVE=1", "brew", "--version"]],
+                &["env", "HOMEBREW_NO_AUTOREMOVE=1", "brew", "cleanup"],
+                Caution,
+            ),
+            native(
                 "pnpm store (pnpm store prune)",
                 &[&["pnpm", "store", "path"]],
                 &["pnpm", "store", "prune"],

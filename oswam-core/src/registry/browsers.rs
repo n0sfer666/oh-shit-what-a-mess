@@ -1,7 +1,7 @@
 use crate::category::{Category, CleanupKind::*, Target};
 use crate::risk::RiskLevel::*;
 
-const CACHE_DIRS: [&str; 9] = [
+pub(crate) const CACHE_DIRS: [&str; 10] = [
     "Cache",
     "Code Cache",
     "GPUCache",
@@ -11,6 +11,7 @@ const CACHE_DIRS: [&str; 9] = [
     "DawnGraphiteCache",
     "DawnWebGPUCache",
     "OptGuideOnDeviceModel",
+    "Shared Dictionary",
 ];
 
 const ROOTS: [&str; 8] = [

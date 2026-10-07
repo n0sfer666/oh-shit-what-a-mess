@@ -50,16 +50,31 @@ oswam clean --safe --delete --yes                   # delete permanently
 
 ## TUI navigation
 
-`j/k ↑↓` move · `h/l` / `Tab` panels · `g/G` edge · `Space` select · `o` group ·
-`t` theme · `Ctrl+P` delete · `?` help · `q` quit.
+`j/k ↑↓` move · `h/l` / `Tab` panels · `g/G` edge · `Space` select · `Enter` category → files /
+toggle file · `a` recommended pick · `n` clear · `o` group · `t` theme · `Ctrl+P` delete ·
+`?` help · `q` quit.
+
+The sidebar shows `selected / available` per category and the bottom bar leads with the total that
+will actually be removed. Files are listed biggest first. `Space` on a category picks only `✓ Safe`
+and `▲ Caution` items that can go to the Trash; `✗ Danger` and permanent-only items are picked one
+by one. After a Trash run, press `e` on the summary to permanently empty exactly what this run put
+in the Trash — the rest of the Trash is left alone.
 
 ## What it cleans
 
-- **System junk**: all of `~/Library/Caches/*` (per app — Steam, Cypress, Firefox, deno,
-  next-swc, …), `~/Library/Logs`, the Trash.
+- **System Data (macOS)** — what macOS Settings lumps into "System Data": all of
+  `~/Library/Caches/*` (per app — Steam, Cypress, Firefox, deno, next-swc, …), `~/Library/Logs`,
+  Saved Application State. Shown for reference only (never deleted): swap (`/System/Volumes/VM`),
+  `sleepimage`, `/private/var/folders`, the Spotlight index and document versions (sudo), and
+  **orphaned iOS Simulator runtimes** in `AssetsV2` that `simctl` no longer knows about — macOS
+  never reclaims them and there is no supported way to remove them (only from Recovery with SIP off).
+- **Trash**: `~/.Trash` contents (Danger — explicit choice only).
 - **Dev environment**: `~/.npm`, `~/.cache`, Xcode DerivedData / iOS DeviceSupport / Archives,
   CoreSimulator, Docker (`docker system prune`), unavailable simulators (`xcrun simctl delete unavailable`).
 - **Large data (info only)**: iOS backups (MobileSync) — display only.
+- **Homebrew**: `brew cleanup` with `HOMEBREW_NO_AUTOREMOVE=1` (old versions and downloads only,
+  dependency formulae are never auto-removed); Android SDK `.downloadIntermediates`;
+  Steam `config/htmlcache` (skipped while Steam runs).
 - **Time Machine snapshots** (sudo only): local APFS snapshots. All are removed **except the
   latest**, kept as a fresh local recovery point.
 - **System caches `/Library/Caches`** (sudo only, **Danger**): contents only (folders kept),
@@ -69,7 +84,10 @@ oswam clean --safe --delete --yes                   # delete permanently
 ## sudo mode
 
 Without sudo, OSWaM cleans user space. Running `sudo oswam` adds Time Machine local snapshots
-and the `/Library/Caches` system caches. If launched without privileges, the welcome screen says
+and fills the System Data group with `/Library/Caches`, `/Library/Logs`, crash reports, the unified
+log (`log erase`) and Command Line Tools. Root cache entries are labelled with their full
+`/Library/Caches/…` path. Note: under sudo, `clean --category system-data` also covers these
+Danger/permanent targets — preview with `--dry-run` or add `--safe`. If launched without privileges, the welcome screen says
 so and suggests `sudo oswam`.
 
 > **System-cache risk**: after cleaning, expect temporary slowdowns (apps and macOS rebuild their

@@ -4,7 +4,7 @@ use crate::risk::RiskLevel;
 
 #[test]
 fn caches_are_enumerated() {
-    let caches = target("system", "~/Library/Caches");
+    let caches = target(SYSTEM_DATA_ID, "~/Library/Caches");
     assert!(caches.enumerate);
     assert_eq!(caches.kind, CleanupKind::DeleteContents);
 }
@@ -25,7 +25,7 @@ fn avd_dir_and_its_ini_are_one_unit() {
 
 #[test]
 fn browsers_touch_only_cache_subfolders() {
-    const ALLOWED: [&str; 9] = [
+    const ALLOWED: [&str; 10] = [
         "Cache",
         "Code Cache",
         "GPUCache",
@@ -35,6 +35,7 @@ fn browsers_touch_only_cache_subfolders() {
         "DawnGraphiteCache",
         "DawnWebGPUCache",
         "OptGuideOnDeviceModel",
+        "Shared Dictionary",
     ];
     let browsers = cat("browsers");
     assert!(!browsers.targets.is_empty());
@@ -114,17 +115,6 @@ fn irreplaceable_user_data_is_never_softer_than_danger() {
 }
 
 #[test]
-fn elevated_targets_all_require_root() {
-    let elevated = cat("elevated");
-    assert!(!elevated.targets.is_empty());
-    assert!(elevated.targets.iter().all(|t| t.needs_root));
-    assert!(has_path(
-        "elevated",
-        "/Library/Developer/CoreSimulator/Caches/dyld"
-    ));
-}
-
-#[test]
 fn every_ambiguous_artifact_name_declares_how_it_proves_itself() {
     let names = cat("projects").targets[0]
         .discover
@@ -154,12 +144,6 @@ fn simulator_devices_are_shown_but_never_removed_by_hand() {
 fn newly_registered_space_hogs_keep_their_risk() {
     for (id, path, kind, risk) in [
         (
-            "big-data",
-            "~/Library/Application Support/Claude/vm_bundles",
-            CleanupKind::InfoOnly,
-            RiskLevel::Danger,
-        ),
-        (
             "dev",
             "~/.local/share/uv/tools",
             CleanupKind::NativeCommand,
@@ -178,7 +162,7 @@ fn newly_registered_space_hogs_keep_their_risk() {
             RiskLevel::Danger,
         ),
         (
-            "elevated",
+            SYSTEM_DATA_ID,
             "/Library/Developer/CommandLineTools",
             CleanupKind::DeletePath,
             RiskLevel::Caution,
@@ -188,14 +172,4 @@ fn newly_registered_space_hogs_keep_their_risk() {
         assert_eq!(t.kind, kind, "{path}");
         assert_eq!(t.risk, risk, "{path}");
     }
-}
-
-#[test]
-fn a_live_vm_disk_is_shown_but_never_deleted_by_hand() {
-    let bundles = target(
-        "big-data",
-        "~/Library/Application Support/Claude/vm_bundles",
-    );
-    assert_eq!(bundles.kind, CleanupKind::InfoOnly);
-    assert_eq!(bundles.risk, RiskLevel::Danger);
 }

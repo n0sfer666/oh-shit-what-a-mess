@@ -1,5 +1,15 @@
 use crate::app::{App, Panel};
+use oswam_core::risk::RiskLevel;
+use oswam_core::scan::ScanEntry;
 use oswam_core::select::is_deletable;
+
+pub fn is_recommended(entry: &ScanEntry) -> bool {
+    is_deletable(entry) && entry.risk == RiskLevel::Safe && !entry.permanent_only
+}
+
+pub fn is_bulk_pick(entry: &ScanEntry) -> bool {
+    is_deletable(entry) && entry.risk <= RiskLevel::Caution && !entry.permanent_only
+}
 
 impl App {
     pub(crate) fn toggle_selection(&mut self) {
@@ -20,23 +30,32 @@ impl App {
         }
     }
 
+    pub(crate) fn select_recommended(&mut self) {
+        self.selected.clear();
+        for (ci, cat) in self.result.categories.iter().enumerate() {
+            for (ei, entry) in cat.entries.iter().enumerate() {
+                if is_recommended(entry) {
+                    self.selected.insert((ci, ei));
+                }
+            }
+        }
+    }
+
     fn toggle_category(&mut self, ci: usize) {
-        let deletable: Vec<usize> = self.result.categories[ci]
+        let bulk: Vec<usize> = self.result.categories[ci]
             .entries
             .iter()
             .enumerate()
-            .filter(|(_, e)| is_deletable(e))
+            .filter(|(_, e)| is_bulk_pick(e))
             .map(|(ei, _)| ei)
             .collect();
-        let all_selected = deletable
-            .iter()
-            .all(|ei| self.selected.contains(&(ci, *ei)));
-        for ei in deletable {
-            if all_selected {
-                self.selected.remove(&(ci, ei));
-            } else {
-                self.selected.insert((ci, ei));
-            }
+        if bulk.is_empty() {
+            self.selected.retain(|(c, _)| *c != ci);
+        } else if bulk.iter().all(|ei| self.selected.contains(&(ci, *ei))) {
+            self.selected
+                .retain(|(c, ei)| *c != ci || !bulk.contains(ei));
+        } else {
+            self.selected.extend(bulk.into_iter().map(|ei| (ci, ei)));
         }
     }
 }
